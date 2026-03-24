@@ -33,7 +33,7 @@ function GanttCellInner({ date, cell, assignment, isMonthStart, isOddMonth }: Pr
     borderTop: '1px solid #e5e7eb',
     borderBottom: '1px solid #e5e7eb',
     borderRight: '1px solid #e5e7eb',
-    borderLeft: isMonthStart ? '3px solid #F59E0B' : '1px solid #e5e7eb',
+    borderLeft: isMonthStart ? '3px solid #0170B9' : '1px solid #e5e7eb',
     padding: 0,
     lineHeight: '24px',
   }
@@ -52,9 +52,11 @@ function GanttCellInner({ date, cell, assignment, isMonthStart, isOddMonth }: Pr
     styles.color = '#FFFFFF'
   }
 
+  const fmtHours = (h?: number) => h != null ? Number(h.toFixed(1)).toString() : ''
+
   const label =
     cell.type === 'active'
-      ? cell.hours?.toString()
+      ? fmtHours(cell.hours)
       : cell.type === 'holiday'
       ? 'F'
       : cell.type === 'vacation'
@@ -78,7 +80,7 @@ function GanttCellInner({ date, cell, assignment, isMonthStart, isOddMonth }: Pr
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           📁 {assignment.project.name} &nbsp;|&nbsp; 👤 {assignment.resource.name} &nbsp;|&nbsp;
-          📅 {format(date, 'dd/MM/yyyy', { locale: es })} &nbsp;|&nbsp; ⏱ {cell.hours}h
+          📅 {format(date, 'dd/MM/yyyy', { locale: es })} &nbsp;|&nbsp; ⏱ {fmtHours(cell.hours)}h
         </div>
       )}
     </td>

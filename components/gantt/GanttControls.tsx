@@ -76,7 +76,7 @@ export default function GanttControls({
       : `${selectedProjects.length} proyectos`
 
   return (
-    <div className="flex flex-wrap items-center gap-3 p-3 bg-white border-b border-gray-200">
+    <div className="flex flex-wrap items-center gap-3 p-3 bg-white border-b" style={{ borderColor: '#E5E5E5' }}>
       {/* Date range */}
       <div className="flex items-center gap-2 text-sm">
         <CalendarDays size={15} className="text-gray-500" />
@@ -127,9 +127,10 @@ export default function GanttControls({
         <button
           ref={buttonRef}
           onClick={handleToggle}
-          className="flex items-center gap-1.5 border border-gray-300 rounded px-2 py-1 text-xs bg-white hover:bg-gray-50 transition-colors min-w-[160px] justify-between"
+          className="flex items-center gap-1.5 rounded px-2 py-1 text-xs bg-white hover:bg-gray-50 transition-colors min-w-[160px] justify-between"
+          style={{ border: '1px solid #E5E5E5' }}
         >
-          <span className={selectedProjects.length > 0 ? 'text-blue-700 font-medium' : 'text-gray-600'}>
+          <span style={{ color: selectedProjects.length > 0 ? '#0170B9' : '#4B4F58', fontWeight: selectedProjects.length > 0 ? 600 : 400 }}>
             {buttonLabel}
           </span>
           <div className="flex items-center gap-0.5">
@@ -166,7 +167,7 @@ export default function GanttControls({
             <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-100 bg-gray-50 sticky top-0">
               <button
                 onClick={() => projects.forEach((p) => { if (!selectedProjects.includes(p.id)) onProjectToggle(p.id) })}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs hover:underline" style={{ color: '#0170B9' }}
               >
                 Seleccionar todos
               </button>
@@ -181,7 +182,7 @@ export default function GanttControls({
             {projects.map((p) => (
               <label
                 key={p.id}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 cursor-pointer transition-colors border-b border-gray-50"
+                className="flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors border-b border-gray-50 hover:bg-[#F5F5F5]"
               >
                 <input
                   type="checkbox"
@@ -205,20 +206,29 @@ export default function GanttControls({
       <div className="ml-auto flex items-center gap-2">
         <button
           onClick={onScrollToday}
-          className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          className="text-xs px-3 py-1.5 rounded transition-colors font-medium"
+          style={{ border: '1px solid #0170B9', color: '#0170B9', background: 'white' }}
+          onMouseEnter={e => { (e.target as HTMLElement).style.background = '#F5F5F5' }}
+          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'white' }}
         >
           Hoy
         </button>
         <button
           onClick={onNewAssignment}
-          className="flex items-center gap-1 text-xs px-3 py-1.5 bg-[#4472C4] text-white rounded hover:bg-[#2E75B6] transition-colors"
+          className="flex items-center gap-1 text-xs px-3 py-1.5 text-white rounded transition-colors font-medium"
+          style={{ backgroundColor: '#0170B9' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#005a94' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#0170B9' }}
         >
           <Plus size={13} />
           Nueva asignación
         </button>
         <button
           onClick={onNewProject}
-          className="flex items-center gap-1 text-xs px-3 py-1.5 bg-[#548235] text-white rounded hover:bg-[#375623] transition-colors"
+          className="flex items-center gap-1 text-xs px-3 py-1.5 text-white rounded transition-colors font-medium"
+          style={{ backgroundColor: '#3a3a3a' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#222222' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = '#3a3a3a' }}
         >
           <Plus size={13} />
           Nuevo proyecto

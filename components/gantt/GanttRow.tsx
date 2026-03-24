@@ -182,9 +182,9 @@ function GanttRowInner({
         <span
           className="text-xs font-semibold block text-center"
           style={{ color: hAsigColor }}
-          title={`Horas asignadas: ${assignedHours}h / Estimadas: ${assignment.estimatedHours}h`}
+          title={`Horas asignadas: ${Number(assignedHours.toFixed(1))}h / Estimadas: ${assignment.estimatedHours}h`}
         >
-          {assignedHours}h
+          {Number(assignedHours.toFixed(1))}h
         </span>,
         7
       )}
