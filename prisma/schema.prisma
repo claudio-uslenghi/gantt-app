@@ -1,0 +1,73 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Resource {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  country   String
+  color     String   @default("#4472C4")
+  capacityH Int      @default(8)
+  createdAt DateTime @default(now())
+
+  assignments Assignment[]
+  holidays    Holiday[]
+  vacations   Vacation[]
+}
+
+model Project {
+  id             Int      @id @default(autoincrement())
+  name           String   @unique
+  color          String
+  status         String
+  priority       String
+  startDate      DateTime
+  endDate        DateTime
+  estimatedHours Int
+  costPerHour    Float    @default(0)
+  notes          String   @default("")
+  createdAt      DateTime @default(now())
+
+  assignments Assignment[]
+}
+
+model Assignment {
+  id             Int      @id @default(autoincrement())
+  projectId      Int
+  resourceId     Int
+  moduleName     String
+  percentage     Int
+  startDate      DateTime
+  endDate        DateTime
+  estimatedHours Int
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+}
+
+model Holiday {
+  id         Int      @id @default(autoincrement())
+  resourceId Int
+  date       DateTime
+  name       String
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, date])
+}
+
+model Vacation {
+  id         Int      @id @default(autoincrement())
+  resourceId Int
+  startDate  DateTime
+  endDate    DateTime
+  notes      String   @default("")
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+}
