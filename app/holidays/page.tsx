@@ -61,7 +61,7 @@ export default function HolidaysPage() {
           <h2 className="text-lg font-semibold text-gray-700">Vacaciones programadas</h2>
           <button
             onClick={() => setShowVacationModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#4472C4] text-white rounded-lg hover:bg-[#2E75B6] transition-colors text-sm"
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm"
           >
             <Plus size={14} />
             Agregar vacación
@@ -70,7 +70,7 @@ export default function HolidaysPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#203864] text-white">
+              <tr className="bg-[#0170B9] text-white">
                 <th className="px-4 py-3 text-left">Recurso</th>
                 <th className="px-4 py-3 text-left">País</th>
                 <th className="px-4 py-3 text-left">Desde</th>
@@ -121,7 +121,7 @@ export default function HolidaysPage() {
           <h2 className="text-lg font-semibold text-gray-700">Feriados no laborables</h2>
           <button
             onClick={() => setShowHolidayModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#C55A11] text-white rounded-lg hover:bg-[#833C00] transition-colors text-sm"
+            className="flex items-center gap-2 px-3 py-1.5 bg-[#3a3a3a] text-white rounded-lg hover:bg-[#222222] transition-colors text-sm"
           >
             <Plus size={14} />
             Agregar feriado
@@ -130,7 +130,7 @@ export default function HolidaysPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-[#203864] text-white">
+              <tr className="bg-[#0170B9] text-white">
                 <th className="px-4 py-3 text-left">Recurso</th>
                 <th className="px-4 py-3 text-left">País</th>
                 <th className="px-4 py-3 text-left">Fecha</th>

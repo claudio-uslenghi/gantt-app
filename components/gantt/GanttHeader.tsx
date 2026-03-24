@@ -51,20 +51,20 @@ export default function GanttHeader({ days }: Props) {
     left: STICKY_OFFSETS[i],
     top: TOP[rowIdx],
     zIndex: 20,
-    backgroundColor: '#203864',
+    backgroundColor: '#0170B9',
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: rowIdx === 0 ? 11 : 10,
     textAlign: 'center',
-    border: '1px solid #2c3e50',
+    border: '1px solid #005a94',
     padding: '4px 2px',
     height: ROW_H[rowIdx],
     width: STICKY_HEADERS[i].width,
     minWidth: STICKY_HEADERS[i].width,
   })
 
-  const dayNumBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#344D73' : '#243752'
-  const dayLetBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#4472C4' : '#2E5FA0'
+  const dayNumBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#005a94' : '#004f85'
+  const dayLetBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#0170B9' : '#0585d8'
 
   return (
     <thead>
@@ -83,12 +83,12 @@ export default function GanttHeader({ days }: Props) {
               position: 'sticky',
               top: TOP[0],
               zIndex: 8,
-              backgroundColor: idx % 2 === 0 ? '#4472C4' : '#2E5FA0',
+              backgroundColor: idx % 2 === 0 ? '#0170B9' : '#0585d8',
               color: '#FFFFFF',
               fontWeight: 'bold',
               fontSize: 11,
               textAlign: 'center',
-              border: '1px solid #2c3e50',
+              border: '1px solid #005a94',
               padding: '4px 2px',
               height: ROW_H[0],
             }}
@@ -121,7 +121,7 @@ export default function GanttHeader({ days }: Props) {
                 borderTop: '1px solid #ccc',
                 borderBottom: '1px solid #ccc',
                 borderRight: '1px solid #ccc',
-                borderLeft: isMonthStart ? '3px solid #F59E0B' : '1px solid #ccc',
+                borderLeft: isMonthStart ? '3px solid #0170B9' : '1px solid #ccc',
                 width: 28,
                 minWidth: 28,
                 height: ROW_H[1],
@@ -157,7 +157,7 @@ export default function GanttHeader({ days }: Props) {
                 borderTop: '1px solid #ccc',
                 borderBottom: '1px solid #ccc',
                 borderRight: '1px solid #ccc',
-                borderLeft: isMonthStart ? '3px solid #F59E0B' : '1px solid #ccc',
+                borderLeft: isMonthStart ? '3px solid #0170B9' : '1px solid #ccc',
                 width: 28,
                 minWidth: 28,
                 height: ROW_H[2],

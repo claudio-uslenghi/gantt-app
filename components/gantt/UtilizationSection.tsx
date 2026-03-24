@@ -28,7 +28,7 @@ export default function UtilizationSection({ resources, days, utilization }: Pro
         <td
           colSpan={8 + days.length}
           style={{
-            backgroundColor: '#203864',
+            backgroundColor: '#0170B9',
             color: '#FFFFFF',
             fontWeight: 'bold',
             fontSize: 12,
@@ -49,7 +49,7 @@ export default function UtilizationSection({ resources, days, utilization }: Pro
             position: 'sticky',
             left: 0,
             zIndex: 5,
-            backgroundColor: '#344D73',
+            backgroundColor: '#005a94',
             color: '#FFFFFF',
             fontWeight: 'bold',
             fontSize: 11,
@@ -64,7 +64,7 @@ export default function UtilizationSection({ resources, days, utilization }: Pro
           const weekend = isWeekend(day)
           const isMonthStart = day.getDate() === 1
           const isOddMonth = getMonth(day) % 2 === 1
-          const dayBg = weekend ? '#D9D9D9' : isOddMonth ? '#2E5FA0' : '#4472C4'
+          const dayBg = weekend ? '#D9D9D9' : isOddMonth ? '#0585d8' : '#0170B9'
           return (
             <td
               key={day.toISOString()}
@@ -135,13 +135,13 @@ export default function UtilizationSection({ resources, days, utilization }: Pro
                     borderTop: '1px solid #e5e7eb',
                     borderBottom: '1px solid #e5e7eb',
                     borderRight: '1px solid #e5e7eb',
-                    borderLeft: isMonthStart ? '3px solid #F59E0B' : '1px solid #e5e7eb',
+                    borderLeft: isMonthStart ? '3px solid #0170B9' : '1px solid #e5e7eb',
                     padding: 0,
                     lineHeight: '24px',
                   }}
-                  title={!weekend && hours > 0 ? `${resource.name}: ${hours}h` : undefined}
+                  title={!weekend && hours > 0 ? `${resource.name}: ${Number(hours.toFixed(1))}h` : undefined}
                 >
-                  {!weekend && hours > 0 ? hours : ''}
+                  {!weekend && hours > 0 ? Number(hours.toFixed(1)) : ''}
                 </td>
               )
             })}

@@ -39,7 +39,7 @@ export default function ResourcesPage() {
         </div>
         <button
           onClick={() => { setEditResource(null); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#4472C4] text-white rounded-lg hover:bg-[#2E75B6] transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           Nuevo Recurso

@@ -56,7 +56,7 @@ export default function ProjectsPage() {
         </div>
         <button
           onClick={() => { setEditProject(null); setShowModal(true) }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#4472C4] text-white rounded-lg hover:bg-[#2E75B6] transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm font-medium"
         >
           <Plus size={16} />
           Nuevo Proyecto
@@ -70,7 +70,7 @@ export default function ProjectsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#203864] text-white">
+                <tr className="bg-[#0170B9] text-white">
                   <th className="px-4 py-3 text-left">Proyecto</th>
                   <th className="px-4 py-3 text-left">Estado</th>
                   <th className="px-4 py-3 text-left">Prioridad</th>
