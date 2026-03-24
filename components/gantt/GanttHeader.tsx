@@ -63,8 +63,6 @@ export default function GanttHeader({ days }: Props) {
     minWidth: STICKY_HEADERS[i].width,
   })
 
-  // Alternating month background: even months lighter, odd months darker blue
-  const monthBg = (monthNum: number) => monthNum % 2 === 0 ? '#4472C4' : '#2E5FA0'
   const dayNumBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#344D73' : '#243752'
   const dayLetBg = (day: Date) => isWeekend(day) ? '#D9D9D9' : getMonth(day) % 2 === 0 ? '#4472C4' : '#2E5FA0'
 
