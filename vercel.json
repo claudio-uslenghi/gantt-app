@@ -2,4 +2,3 @@
   "buildCommand": "npm ci && npx prisma generate && npm run build",
   "outputDirectory": ".next"
 }
-// Force rebuild
