@@ -4,17 +4,16 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { eachDayOfInterval, isWeekend, parseISO } from 'date-fns'
 import { formatDate } from '@/lib/date-utils'
-import { Plus, Trash2, Upload, Download, Filter } from 'lucide-react'
+import { Plus, Trash2, Upload, Download, Filter, Pencil } from 'lucide-react'
 import HolidayModal from '@/components/modals/HolidayModal'
 import VacationModal from '@/components/modals/VacationModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
 import type { Vacation, CountryHoliday } from '@/types'
-import { FLAG_BY_NAME, CODE_BY_NAME } from '@/lib/countries'
+import { FLAG_BY_NAME } from '@/lib/countries'
 
 function countryLabel(name: string) {
   const flag = FLAG_BY_NAME[name] ?? '🌍'
-  const code = CODE_BY_NAME[name] ?? name.slice(0, 2).toUpperCase()
-  return `${flag} ${code} — ${name}`
+  return `${flag} ${name}`
 }
 
 function calcWorkingDays(start: string, end: string) {
@@ -27,6 +26,7 @@ function calcWorkingDays(start: string, end: string) {
 export default function HolidaysPage() {
   const qc = useQueryClient()
   const [showHolidayModal, setShowHolidayModal] = useState(false)
+  const [editHoliday, setEditHoliday] = useState<CountryHoliday | null>(null)
   const [showVacationModal, setShowVacationModal] = useState(false)
   const [showCsvModal, setShowCsvModal] = useState(false)
   const [filterCountry, setFilterCountry] = useState<string>('')
@@ -164,7 +164,7 @@ export default function HolidaysPage() {
             </button>
             {/* Add single */}
             <button
-              onClick={() => setShowHolidayModal(true)}
+              onClick={() => { setEditHoliday(null); setShowHolidayModal(true) }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm"
             >
               <Plus size={14} /> Agregar
@@ -202,12 +202,22 @@ export default function HolidaysPage() {
                         <td className="px-4 py-3 font-medium">{formatDate(h.date)}</td>
                         <td className="px-4 py-3 text-gray-700">{h.name}</td>
                         <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => deleteCountryHoliday(h.id)}
-                            className="text-red-400 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => { setEditHoliday(h); setShowHolidayModal(true) }}
+                              className="text-blue-400 hover:text-blue-600 transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => deleteCountryHoliday(h.id)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                              title="Eliminar"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -223,7 +233,7 @@ export default function HolidaysPage() {
         </p>
       </section>
 
-      <HolidayModal open={showHolidayModal} onClose={() => setShowHolidayModal(false)} />
+      <HolidayModal open={showHolidayModal} onClose={() => { setShowHolidayModal(false); setEditHoliday(null) }} editHoliday={editHoliday} />
       <VacationModal open={showVacationModal} onClose={() => setShowVacationModal(false)} />
       <CsvImportModal open={showCsvModal} onClose={() => setShowCsvModal(false)} />
     </div>

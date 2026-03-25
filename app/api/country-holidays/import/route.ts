@@ -39,13 +39,13 @@ export async function POST(req: NextRequest) {
   let totalResourceHolidays = 0
 
   for (const [country, holidays] of Array.from(byCountry.entries())) {
-    // Upsert CountryHoliday records
+    // Use raw SQL to avoid Prisma DateTime upsert issues with libSQL adapter
     for (const h of holidays) {
-      await prisma.countryHoliday.upsert({
-        where: { country_date: { country, date: h.date } },
-        create: { country, date: h.date, name: h.name },
-        update: { name: h.name },
-      })
+      await prisma.$executeRaw`
+        INSERT INTO "CountryHoliday" (country, date, name)
+        VALUES (${country}, ${h.date.toISOString()}, ${h.name})
+        ON CONFLICT (country, date) DO UPDATE SET name = excluded.name
+      `
       totalCountryHolidays++
     }
 
@@ -53,11 +53,11 @@ export async function POST(req: NextRequest) {
     const resources = await prisma.resource.findMany({ where: { country } })
     for (const resource of resources) {
       for (const h of holidays) {
-        await prisma.holiday.upsert({
-          where: { resourceId_date: { resourceId: resource.id, date: h.date } },
-          create: { resourceId: resource.id, date: h.date, name: h.name },
-          update: { name: h.name },
-        })
+        await prisma.$executeRaw`
+          INSERT INTO "Holiday" (resourceId, date, name)
+          VALUES (${resource.id}, ${h.date.toISOString()}, ${h.name})
+          ON CONFLICT (resourceId, date) DO UPDATE SET name = excluded.name
+        `
         totalResourceHolidays++
       }
     }

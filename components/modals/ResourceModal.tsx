@@ -111,7 +111,7 @@ export default function ResourceModal({ open, onClose, editResource }: Props) {
             <select {...register('country')} className="w-full border rounded px-3 py-2 text-sm">
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.name}>
-                  {c.flag} {c.code} — {c.name}
+                  {c.flag} {c.name}
                 </option>
               ))}
             </select>
