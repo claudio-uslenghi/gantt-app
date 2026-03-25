@@ -4,8 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQueryClient } from '@tanstack/react-query'
-
-const COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'Otro']
+import { COUNTRIES } from '@/lib/countries'
 
 const schema = z.object({
   country: z.string().min(1),
@@ -59,7 +58,9 @@ export default function HolidayModal({ open, onClose }: Props) {
             <label className="block text-sm font-medium mb-1">País *</label>
             <select {...register('country')} className="w-full border rounded px-3 py-2 text-sm">
               <option value="">Seleccionar...</option>
-              {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.name}>{c.flag} {c.code} — {c.name}</option>
+              ))}
             </select>
           </div>
           <div>

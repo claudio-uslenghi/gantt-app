@@ -9,11 +9,12 @@ import HolidayModal from '@/components/modals/HolidayModal'
 import VacationModal from '@/components/modals/VacationModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
 import type { Vacation, CountryHoliday } from '@/types'
+import { FLAG_BY_NAME, CODE_BY_NAME } from '@/lib/countries'
 
-const COUNTRY_FLAG: Record<string, string> = {
-  Argentina: '🇦🇷', Uruguay: '🇺🇾', Chile: '🇨🇱', Brasil: '🇧🇷',
-  Paraguay: '🇵🇾', Bolivia: '🇧🇴', Perú: '🇵🇪', Colombia: '🇨🇴',
-  México: '🇲🇽', España: '🇪🇸', Otro: '🌍',
+function countryLabel(name: string) {
+  const flag = FLAG_BY_NAME[name] ?? '🌍'
+  const code = CODE_BY_NAME[name] ?? name.slice(0, 2).toUpperCase()
+  return `${flag} ${code} — ${name}`
 }
 
 function fmtDate(d: string) {
@@ -117,7 +118,7 @@ export default function HolidaysPage() {
                       <span className="font-medium">{v.resource?.name ?? '—'}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{COUNTRY_FLAG[v.resource?.country ?? ''] ?? '🌍'} {v.resource?.country}</td>
+                  <td className="px-4 py-3 text-gray-500">{countryLabel(v.resource?.country ?? 'Otro')}</td>
                   <td className="px-4 py-3">{fmtDate(v.startDate)}</td>
                   <td className="px-4 py-3">{fmtDate(v.endDate)}</td>
                   <td className="px-4 py-3 text-right font-medium">{calcWorkingDays(v.startDate, v.endDate)} días</td>
@@ -148,7 +149,7 @@ export default function HolidaysPage() {
                 className="text-sm text-gray-700 bg-transparent outline-none"
               >
                 <option value="">Todos los países</option>
-                {availableCountries.map((c) => <option key={c} value={c}>{COUNTRY_FLAG[c] ?? '🌍'} {c}</option>)}
+                {availableCountries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
               </select>
             </div>
             {/* Download */}
@@ -197,12 +198,12 @@ export default function HolidaysPage() {
                     {/* Country sub-header */}
                     <tr key={`header-${country}`} className="bg-gray-50">
                       <td colSpan={4} className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        {COUNTRY_FLAG[country]} {country} — {holidays.length} feriado{holidays.length !== 1 ? 's' : ''}
+                        {countryLabel(country)} — {holidays.length} feriado{holidays.length !== 1 ? 's' : ''}
                       </td>
                     </tr>
                     {holidays.map((h) => (
                       <tr key={h.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-500">{COUNTRY_FLAG[h.country] ?? '🌍'} {h.country}</td>
+                        <td className="px-4 py-3 text-gray-500">{countryLabel(h.country)}</td>
                         <td className="px-4 py-3 font-medium">{fmtDate(h.date)}</td>
                         <td className="px-4 py-3 text-gray-700">{h.name}</td>
                         <td className="px-4 py-3 text-center">
