@@ -10,10 +10,10 @@ import VacationModal from '@/components/modals/VacationModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
 import type { Vacation, CountryHoliday } from '@/types'
 
-const COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'Otro']
-
 const COUNTRY_FLAG: Record<string, string> = {
-  Argentina: '🇦🇷', Uruguay: '🇺🇾', Chile: '🇨🇱', Otro: '🌍',
+  Argentina: '🇦🇷', Uruguay: '🇺🇾', Chile: '🇨🇱', Brasil: '🇧🇷',
+  Paraguay: '🇵🇾', Bolivia: '🇧🇴', Perú: '🇵🇪', Colombia: '🇨🇴',
+  México: '🇲🇽', España: '🇪🇸', Otro: '🌍',
 }
 
 function fmtDate(d: string) {
@@ -64,12 +64,15 @@ export default function HolidaysPage() {
     window.open(`/api/country-holidays/export${params}`, '_blank')
   }
 
+  // Derive countries dynamically from data (sorted alphabetically)
+  const availableCountries = Array.from(new Set(countryHolidays.map((h) => h.country))).sort()
+
   // Filter and group by country
   const filtered = filterCountry
     ? countryHolidays.filter((h) => h.country === filterCountry)
     : countryHolidays
 
-  const grouped = COUNTRIES.reduce<Record<string, CountryHoliday[]>>((acc, c) => {
+  const grouped = availableCountries.reduce<Record<string, CountryHoliday[]>>((acc, c) => {
     const items = filtered.filter((h) => h.country === c)
     if (items.length) acc[c] = items
     return acc
@@ -145,7 +148,7 @@ export default function HolidaysPage() {
                 className="text-sm text-gray-700 bg-transparent outline-none"
               >
                 <option value="">Todos los países</option>
-                {COUNTRIES.map((c) => <option key={c} value={c}>{COUNTRY_FLAG[c]} {c}</option>)}
+                {availableCountries.map((c) => <option key={c} value={c}>{COUNTRY_FLAG[c] ?? '🌍'} {c}</option>)}
               </select>
             </div>
             {/* Download */}

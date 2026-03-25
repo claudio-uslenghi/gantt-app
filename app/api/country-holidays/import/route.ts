@@ -6,13 +6,18 @@ import { parseISO, parse, isValid } from 'date-fns'
 
 function parseDate(raw: string): Date | null {
   const trimmed = raw.trim()
+  let d: Date | null = null
   // Try YYYY-MM-DD
   const iso = parseISO(trimmed)
-  if (isValid(iso)) return iso
+  if (isValid(iso)) d = iso
   // Try DD/MM/YYYY
-  const dmy = parse(trimmed, 'dd/MM/yyyy', new Date())
-  if (isValid(dmy)) return dmy
-  return null
+  else {
+    const dmy = parse(trimmed, 'dd/MM/yyyy', new Date())
+    if (isValid(dmy)) d = dmy
+  }
+  if (!d) return null
+  // Normalize to midnight UTC to ensure consistent comparison in SQLite
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
 }
 
 export async function POST(req: NextRequest) {
