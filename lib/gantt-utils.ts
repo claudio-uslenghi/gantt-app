@@ -25,10 +25,16 @@ export function getCellData(
 
   if (!isWithinInterval(date, { start, end })) return { type: 'out-of-range' }
 
+  // Compare using date-part only to avoid UTC timezone offset shifting the day.
+  // For the cell date (local Date), use local year/month/day.
+  // For the holiday date (ISO string from DB), take the first 10 chars (YYYY-MM-DD).
+  const toDateKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const cellKey = toDateKey(date)
   const isHoliday = holidays.some(
     (h) =>
       h.resourceId === assignment.resourceId &&
-      isSameDay(typeof h.date === 'string' ? parseISO(h.date) : h.date as unknown as Date, date)
+      (typeof h.date === 'string' ? h.date : (h.date as unknown as Date).toISOString()).substring(0, 10) === cellKey
   )
   if (isHoliday) return { type: 'holiday', label: 'F' }
 

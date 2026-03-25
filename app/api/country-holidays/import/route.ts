@@ -16,8 +16,8 @@ function parseDate(raw: string): Date | null {
     if (isValid(dmy)) d = dmy
   }
   if (!d) return null
-  // Normalize to midnight UTC to ensure consistent comparison in SQLite
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  // Store at noon UTC so the date is correct in any timezone (UTC-12 to UTC+12)
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0))
 }
 
 export async function POST(req: NextRequest) {

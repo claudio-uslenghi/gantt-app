@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { format, parseISO, eachDayOfInterval, isWeekend } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { eachDayOfInterval, isWeekend, parseISO } from 'date-fns'
+import { formatDate } from '@/lib/date-utils'
 import { Plus, Trash2, Upload, Download, Filter } from 'lucide-react'
 import HolidayModal from '@/components/modals/HolidayModal'
 import VacationModal from '@/components/modals/VacationModal'
@@ -15,11 +15,6 @@ function countryLabel(name: string) {
   const flag = FLAG_BY_NAME[name] ?? '🌍'
   const code = CODE_BY_NAME[name] ?? name.slice(0, 2).toUpperCase()
   return `${flag} ${code} — ${name}`
-}
-
-function fmtDate(d: string) {
-  try { return format(parseISO(d), 'dd/MM/yyyy', { locale: es }) }
-  catch { return d }
 }
 
 function calcWorkingDays(start: string, end: string) {
@@ -119,8 +114,8 @@ export default function HolidaysPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500">{countryLabel(v.resource?.country ?? 'Otro')}</td>
-                  <td className="px-4 py-3">{fmtDate(v.startDate)}</td>
-                  <td className="px-4 py-3">{fmtDate(v.endDate)}</td>
+                  <td className="px-4 py-3">{formatDate(v.startDate)}</td>
+                  <td className="px-4 py-3">{formatDate(v.endDate)}</td>
                   <td className="px-4 py-3 text-right font-medium">{calcWorkingDays(v.startDate, v.endDate)} días</td>
                   <td className="px-4 py-3 text-gray-500">{v.notes || '—'}</td>
                   <td className="px-4 py-3 text-center">
@@ -204,7 +199,7 @@ export default function HolidaysPage() {
                     {holidays.map((h) => (
                       <tr key={h.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500">{countryLabel(h.country)}</td>
-                        <td className="px-4 py-3 font-medium">{fmtDate(h.date)}</td>
+                        <td className="px-4 py-3 font-medium">{formatDate(h.date)}</td>
                         <td className="px-4 py-3 text-gray-700">{h.name}</td>
                         <td className="px-4 py-3 text-center">
                           <button
