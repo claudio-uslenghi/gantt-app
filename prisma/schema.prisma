@@ -71,3 +71,12 @@ model Vacation {
 
   resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 }
+
+model CountryHoliday {
+  id      Int      @id @default(autoincrement())
+  country String
+  date    DateTime
+  name    String
+
+  @@unique([country, date])
+}

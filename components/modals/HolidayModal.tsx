@@ -3,11 +3,12 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Resource } from '@/types'
+import { useQueryClient } from '@tanstack/react-query'
+
+const COUNTRIES = ['Argentina', 'Uruguay', 'Chile', 'Otro']
 
 const schema = z.object({
-  resourceId: z.coerce.number().min(1),
+  country: z.string().min(1),
   date: z.string().min(1),
   name: z.string().min(1),
 })
@@ -21,22 +22,22 @@ interface Props {
 
 export default function HolidayModal({ open, onClose }: Props) {
   const qc = useQueryClient()
-  const { data: resources = [] } = useQuery<Resource[]>({
-    queryKey: ['resources'],
-    queryFn: () => fetch('/api/resources').then((r) => r.json()),
-  })
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
 
   const onSubmit = async (data: FormData) => {
-    const res = await fetch('/api/holidays', {
+    // POST to import endpoint: creates CountryHoliday + syncs to resource holidays
+    const res = await fetch('/api/country-holidays/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        holidays: [{ country: data.country, date: data.date, name: data.name }],
+      }),
     })
     if (res.ok) {
+      qc.invalidateQueries({ queryKey: ['country-holidays'] })
       qc.invalidateQueries({ queryKey: ['holidays'] })
       qc.invalidateQueries({ queryKey: ['gantt'] })
       reset()
@@ -55,10 +56,10 @@ export default function HolidayModal({ open, onClose }: Props) {
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Recurso *</label>
-            <select {...register('resourceId')} className="w-full border rounded px-3 py-2 text-sm">
+            <label className="block text-sm font-medium mb-1">País *</label>
+            <select {...register('country')} className="w-full border rounded px-3 py-2 text-sm">
               <option value="">Seleccionar...</option>
-              {resources.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
@@ -71,7 +72,7 @@ export default function HolidayModal({ open, onClose }: Props) {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 border rounded text-sm hover:bg-gray-50">Cancelar</button>
-            <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-[#4472C4] text-white rounded text-sm hover:bg-[#2E75B6] disabled:opacity-50">
+            <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-[#0170B9] text-white rounded text-sm hover:bg-[#005a94] disabled:opacity-50">
               {isSubmitting ? 'Guardando...' : 'Guardar'}
             </button>
           </div>

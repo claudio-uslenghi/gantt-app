@@ -42,6 +42,13 @@ export interface Holiday {
   resource?: Resource
 }
 
+export interface CountryHoliday {
+  id: number
+  country: string
+  date: string
+  name: string
+}
+
 export interface Vacation {
   id: number
   resourceId: number
