@@ -17,28 +17,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-// National holidays for auto-load
-const HOLIDAY_PRESETS: Record<string, { date: string; name: string }[]> = {
-  Argentina: [
-    { date: '2026-03-24', name: 'Día de la Memoria' },
-    { date: '2026-04-02', name: 'Día del Veterano' },
-    { date: '2026-04-03', name: 'Viernes Santo' },
-    { date: '2026-05-01', name: 'Día del Trabajador' },
-    { date: '2026-05-25', name: 'Revolución de Mayo' },
-    { date: '2026-06-15', name: 'Paso a la Inmortalidad Gral. Güemes' },
-  ],
-  Uruguay: [
-    { date: '2026-04-02', name: 'Semana Santa' },
-    { date: '2026-04-03', name: 'Semana Santa' },
-    { date: '2026-05-01', name: 'Día de los Trabajadores' },
-  ],
-  Chile: [
-    { date: '2026-04-03', name: 'Viernes Santo' },
-    { date: '2026-05-01', name: 'Día del Trabajador' },
-    { date: '2026-05-21', name: 'Día de las Glorias Navales' },
-  ],
-}
-
 interface Props {
   open: boolean
   onClose: () => void
@@ -76,18 +54,24 @@ export default function ResourceModal({ open, onClose, editResource }: Props) {
       await res.json()
       qc.invalidateQueries({ queryKey: ['resources'] })
       qc.invalidateQueries({ queryKey: ['gantt'] })
+      qc.invalidateQueries({ queryKey: ['holidays'] })
       onClose()
     }
   }
 
   const loadHolidays = async () => {
-    const presets = HOLIDAY_PRESETS[country]
-    if (!presets || !editResource) return
-    const body = presets.map((h) => ({ resourceId: editResource.id, date: h.date, name: h.name }))
-    await fetch('/api/holidays', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-    qc.invalidateQueries({ queryKey: ['gantt'] })
-    qc.invalidateQueries({ queryKey: ['holidays'] })
-    alert(`${presets.length} feriados cargados para ${country}`)
+    if (!editResource) return
+    const res = await fetch(`/api/resources/${editResource.id}/sync-holidays`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ country }),
+    })
+    if (res.ok) {
+      const { synced } = await res.json()
+      qc.invalidateQueries({ queryKey: ['gantt'] })
+      qc.invalidateQueries({ queryKey: ['holidays'] })
+      alert(`${synced} feriados cargados para ${country}`)
+    }
   }
 
   if (!open) return null
@@ -127,13 +111,13 @@ export default function ResourceModal({ open, onClose, editResource }: Props) {
             <input type="number" min="1" max="24" {...register('capacityH')} className="w-full border rounded px-3 py-2 text-sm" />
           </div>
 
-          {editResource && HOLIDAY_PRESETS[country] && (
+          {editResource && (
             <button
               type="button"
               onClick={loadHolidays}
               className="w-full text-sm px-3 py-2 bg-amber-50 border border-amber-300 text-amber-700 rounded hover:bg-amber-100"
             >
-              📅 Cargar feriados 2026 de {country}
+              📅 Cargar feriados de {country}
             </button>
           )}
 

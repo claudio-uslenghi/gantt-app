@@ -24,11 +24,11 @@ export async function POST(req: NextRequest) {
     where: { country: resource.country },
   })
   for (const ch of countryHolidays) {
-    await prisma.holiday.upsert({
-      where: { resourceId_date: { resourceId: resource.id, date: ch.date } },
-      create: { resourceId: resource.id, date: ch.date, name: ch.name },
-      update: { name: ch.name },
-    })
+    await prisma.$executeRaw`
+      INSERT INTO "Holiday" (resourceId, date, name)
+      VALUES (${resource.id}, ${ch.date.toISOString()}, ${ch.name})
+      ON CONFLICT (resourceId, date) DO UPDATE SET name = excluded.name
+    `
   }
 
   return NextResponse.json(resource, { status: 201 })
