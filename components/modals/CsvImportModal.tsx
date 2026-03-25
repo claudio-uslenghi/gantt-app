@@ -61,12 +61,26 @@ export default function CsvImportModal({ open, onClose }: Props) {
     setResult(null)
     const reader = new FileReader()
     reader.onload = (ev) => {
-      const text = ev.target?.result as string
+      const buffer = ev.target?.result as ArrayBuffer
+      const uint8 = new Uint8Array(buffer)
+
+      let text: string
+      // Detect UTF-8 BOM (EF BB BF) and strip it
+      if (uint8[0] === 0xEF && uint8[1] === 0xBB && uint8[2] === 0xBF) {
+        text = new TextDecoder('UTF-8').decode(uint8.slice(3))
+      } else {
+        // Try UTF-8 first; if replacement chars appear, fall back to Windows-1252
+        const utf8 = new TextDecoder('UTF-8').decode(uint8)
+        text = utf8.includes('\uFFFD')
+          ? new TextDecoder('windows-1252').decode(uint8)
+          : utf8
+      }
+
       const { rows, errors } = parseCSV(text)
       setParsed(rows)
       setParseErrors(errors)
     }
-    reader.readAsText(file, 'UTF-8')
+    reader.readAsArrayBuffer(file)
   }
 
   const handleImport = async () => {
