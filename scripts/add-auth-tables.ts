@@ -33,7 +33,7 @@ async function main() {
       password TEXT NOT NULL,
       name TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      createdAt TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     )
   `)
 
