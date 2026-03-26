@@ -3,8 +3,22 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { BarChart3, FolderKanban, Users, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  BarChart3,
+  FolderKanban,
+  Users,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Shield,
+  UserCog,
+  KeyRound,
+  LogOut,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSession, signOut } from 'next-auth/react'
 
 const NAV_ITEMS = [
   { href: '/gantt', icon: BarChart3, label: 'Gantt' },
@@ -13,9 +27,21 @@ const NAV_ITEMS = [
   { href: '/holidays', icon: CalendarDays, label: 'Feriados & Vacaciones' },
 ]
 
+const ADMIN_ITEMS = [
+  { href: '/admin/users', icon: UserCog, label: 'Usuarios' },
+  { href: '/admin/roles', icon: Shield, label: 'Roles' },
+  { href: '/admin/permissions', icon: KeyRound, label: 'Permisos' },
+]
+
 export default function Sidebar() {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(pathname.startsWith('/admin'))
+  const { data: session } = useSession()
+
+  const roles = (session?.user as { roles?: string[] })?.roles ?? []
+  const isAdmin = roles.includes('admin')
+  const userName = session?.user?.name ?? session?.user?.email ?? ''
 
   return (
     <aside
@@ -44,7 +70,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-col gap-0.5 p-2 flex-1">
+      <nav className="flex flex-col gap-0.5 p-2 flex-1 overflow-y-auto">
         {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href || (href !== '/' && pathname.startsWith(href))
           return (
@@ -63,11 +89,74 @@ export default function Sidebar() {
             </Link>
           )
         })}
+
+        {/* Admin section */}
+        {isAdmin && (
+          <>
+            {!collapsed && (
+              <button
+                onClick={() => setAdminOpen((o) => !o)}
+                className="flex items-center justify-between px-3 py-2 mt-2 rounded text-xs text-white/60 hover:text-white/90 hover:bg-white/10 transition-all"
+              >
+                <span className="font-semibold tracking-wider uppercase">Administración</span>
+                {adminOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            )}
+            {collapsed && <div className="border-t border-white/20 mt-2 mb-1" />}
+
+            {(adminOpen || collapsed) &&
+              ADMIN_ITEMS.map(({ href, icon: Icon, label }) => {
+                const isActive = pathname.startsWith(href)
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2 rounded text-sm transition-all duration-150',
+                      collapsed ? '' : 'pl-5',
+                      isActive
+                        ? 'bg-white/25 text-white font-semibold shadow-sm'
+                        : 'text-white/70 hover:bg-white/15 hover:text-white'
+                    )}
+                  >
+                    <Icon size={15} className="shrink-0" />
+                    {!collapsed && <span className="truncate">{label}</span>}
+                  </Link>
+                )
+              })}
+          </>
+        )}
       </nav>
 
-      <div className="p-3 border-t border-white/20 text-xs text-white/40 text-center">
-        {!collapsed && (
-          <span className="font-medium tracking-wide">ZIRCON · 2026</span>
+      {/* User & logout */}
+      <div className="p-3 border-t border-white/20">
+        {!collapsed ? (
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center shrink-0 text-xs font-bold uppercase">
+              {userName.charAt(0)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-white truncate">{userName}</p>
+              <p className="text-xs text-white/50 truncate">
+                {roles.join(', ')}
+              </p>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              title="Cerrar sesión"
+              className="p-1.5 rounded hover:bg-white/15 text-white/70 hover:text-white transition-colors"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            title="Cerrar sesión"
+            className="w-full flex justify-center p-1.5 rounded hover:bg-white/15 text-white/70 hover:text-white transition-colors"
+          >
+            <LogOut size={16} />
+          </button>
         )}
       </div>
     </aside>
