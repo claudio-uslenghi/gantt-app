@@ -6,6 +6,7 @@ import { createClient } from '@libsql/client'
 import type { ImportTimeEntriesResult, ParsedTimeEntry } from '@/types'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -55,67 +56,52 @@ export async function POST(req: NextRequest) {
   }
 
   if (!resolved.length) {
-    const result: ImportTimeEntriesResult = {
+    return NextResponse.json({
       inserted: 0,
       updated: 0,
       skipped: entries.length,
       unmatchedResources: Array.from(unmatchedResources),
       unmatchedProjects: Array.from(unmatchedProjects),
       errors: [],
-    }
-    return NextResponse.json(result)
+    } satisfies ImportTimeEntriesResult)
   }
 
-  // Fetch existing entries to count inserts vs updates
-  const existingSet = new Set<string>()
-  const existingRows = await prisma.timeEntry.findMany({
-    where: {
-      OR: resolved.map((e) => ({
-        resourceId: e.resourceId,
-        projectId: e.projectId,
-        date: new Date(e.date),
-      })),
-    },
-    select: { resourceId: true, projectId: true, date: true },
-  })
-  for (const row of existingRows) {
-    const key = `${row.resourceId}_${row.projectId}_${(row.date as unknown as Date).toISOString().substring(0, 10)}`
-    existingSet.add(key)
-  }
+  // Count existing records before batch (simple, no complex OR)
+  const countBefore = await prisma.timeEntry.count()
 
-  // Use libSQL batch for performance (single HTTP round-trip)
+  // Use libSQL batch for performance (single HTTP round-trip to Turso)
   const turso = createClient({
     url: process.env.TURSO_DATABASE_URL!,
     authToken: process.env.TURSO_AUTH_TOKEN,
   })
 
-  const statements = resolved.map((e) => ({
-    sql: `INSERT INTO "TimeEntry" (resourceId, projectId, date, hours)
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT (resourceId, projectId, date) DO UPDATE SET hours = excluded.hours`,
-    args: [e.resourceId, e.projectId, e.date, e.hours],
-  }))
-
-  await turso.batch(statements, 'write')
+  // Process in chunks of 1000 to avoid request size limits
+  const CHUNK = 1000
+  for (let i = 0; i < resolved.length; i += CHUNK) {
+    const chunk = resolved.slice(i, i + CHUNK)
+    await turso.batch(
+      chunk.map((e) => ({
+        sql: `INSERT INTO "TimeEntry" (resourceId, projectId, date, hours)
+              VALUES (?, ?, ?, ?)
+              ON CONFLICT (resourceId, projectId, date) DO UPDATE SET hours = excluded.hours`,
+        args: [e.resourceId, e.projectId, e.date, e.hours],
+      })),
+      'write'
+    )
+  }
   turso.close()
 
-  // Count inserts vs updates
-  let inserted = 0
-  let updated = 0
-  for (const e of resolved) {
-    const key = `${e.resourceId}_${e.projectId}_${e.date.substring(0, 10)}`
-    if (existingSet.has(key)) updated++
-    else inserted++
-  }
+  // Count after to determine inserts vs updates
+  const countAfter = await prisma.timeEntry.count()
+  const inserted = countAfter - countBefore
+  const updated = resolved.length - inserted
 
-  const result: ImportTimeEntriesResult = {
+  return NextResponse.json({
     inserted,
     updated,
     skipped: entries.length - resolved.length,
     unmatchedResources: Array.from(unmatchedResources),
     unmatchedProjects: Array.from(unmatchedProjects),
     errors: [],
-  }
-
-  return NextResponse.json(result)
+  } satisfies ImportTimeEntriesResult)
 }
