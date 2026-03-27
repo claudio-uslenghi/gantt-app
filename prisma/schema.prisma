@@ -19,6 +19,7 @@ model Resource {
   assignments Assignment[]
   holidays    Holiday[]
   vacations   Vacation[]
+  timeEntries TimeEntry[]
 }
 
 model Project {
@@ -35,6 +36,7 @@ model Project {
   createdAt      DateTime @default(now())
 
   assignments Assignment[]
+  timeEntries TimeEntry[]
 }
 
 model Assignment {
@@ -118,4 +120,17 @@ model PagePermission {
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([page, roleId])
+}
+
+model TimeEntry {
+  id         Int      @id @default(autoincrement())
+  resourceId Int
+  projectId  Int
+  date       DateTime
+  hours      Float
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([resourceId, projectId, date])
 }

@@ -74,6 +74,51 @@ export interface CellData {
   label?: string
 }
 
+export interface TimeEntry {
+  id: number
+  resourceId: number
+  projectId: number
+  date: string
+  hours: number
+  resource?: Pick<Resource, 'id' | 'name' | 'color'>
+  project?: Pick<Project, 'id' | 'name' | 'color'>
+}
+
+export interface TimeEntryByResource {
+  resourceId: number
+  resourceName: string
+  resourceColor: string
+  totalHours: number
+}
+
+export interface TimeEntryByProject {
+  projectId: number
+  projectName: string
+  projectColor: string
+  totalHours: number
+}
+
+export interface TimeEntryByMonth {
+  month: string
+  totalHours: number
+}
+
+export interface ImportTimeEntriesResult {
+  inserted: number
+  updated: number
+  skipped: number
+  unmatchedResources: string[]
+  unmatchedProjects: string[]
+  errors: string[]
+}
+
+export interface ParsedTimeEntry {
+  resourceName: string
+  projectName: string
+  date: string
+  hours: number
+}
+
 export type ProjectStatus = 'En ejecución' | 'Próximo' | 'En planificación' | 'Continuo' | 'Finalizado'
 export type ProjectPriority = 'Alta' | 'Media' | 'Baja'
 export type Country = 'Argentina' | 'Uruguay' | 'Chile' | 'Otro'
