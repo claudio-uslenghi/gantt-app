@@ -20,6 +20,17 @@ interface Props {
   onScrollToday: () => void
 }
 
+/** Muestra solo el primer nombre. Si hay duplicados, agrega la inicial del apellido. */
+function shortName(name: string, allNames: string[]): string {
+  const parts = name.trim().split(/\s+/)
+  const first = parts[0]
+  const hasDuplicate = allNames.some(
+    (n) => n !== name && n.trim().split(/\s+/)[0].toLowerCase() === first.toLowerCase()
+  )
+  if (hasDuplicate && parts.length > 1) return `${first} ${parts[1][0].toUpperCase()}.`
+  return first
+}
+
 export default function GanttControls({
   resources,
   projects,
@@ -96,7 +107,7 @@ export default function GanttControls({
       </div>
 
       {/* Resource filter */}
-      <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-2 text-xs flex-wrap">
         <span className="text-gray-500 font-medium">Recursos:</span>
         {resources.map((r) => (
           <label key={r.id} className="flex items-center gap-1 cursor-pointer select-none">
@@ -104,7 +115,7 @@ export default function GanttControls({
               type="checkbox"
               checked={selectedResources.includes(r.id)}
               onChange={() => onResourceToggle(r.id)}
-              className="w-3 h-3 accent-blue-600"
+              className="w-3 h-3 accent-[#0170B9]"
             />
             <span
               className="font-medium px-1.5 py-0.5 rounded"
@@ -115,7 +126,7 @@ export default function GanttControls({
                 transition: 'all 0.15s',
               }}
             >
-              {r.name}
+              {shortName(r.name, resources.map(x => x.name))}
             </span>
           </label>
         ))}

@@ -135,8 +135,12 @@ export default function GanttTable({ onNewAssignment, onNewProject, onEditAssign
         onScrollToday={handleScrollToday}
       />
 
-      <div className="px-4 py-2 bg-[#203864] text-white font-bold text-sm">
-        PLANIFICACION DE PROYECTOS - Vista Diaria | {startDate} hacia {endDate}
+      <div className="px-4 py-1.5 text-white text-xs flex items-center gap-3" style={{ backgroundColor: '#3a3a3a' }}>
+        <span className="font-bold tracking-wide">PLANIFICACIÓN DE PROYECTOS</span>
+        <span className="opacity-40">|</span>
+        <span className="opacity-80">Vista Diaria</span>
+        <span className="opacity-40">·</span>
+        <span className="opacity-80">{startDate} → {endDate}</span>
       </div>
 
       <div className="flex-1 overflow-auto gantt-scroll" ref={scrollRef}>

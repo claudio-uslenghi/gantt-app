@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react'
 import ProjectModal from '@/components/modals/ProjectModal'
 import { formatDate } from '@/lib/date-utils'
 import type { Project } from '@/types'
@@ -39,9 +39,10 @@ export default function ProjectsPage() {
   const qc = useQueryClient()
   const [showModal, setShowModal]     = useState(false)
   const [editProject, setEditProject] = useState<Project | null>(null)
-  const [sortKey, setSortKey]         = useState<SortKey>('name')
-  const [sortDir, setSortDir]         = useState<SortDir>('asc')
-  const [statusFilter, setStatusFilter] = useState<string>('active') // 'active' = all except Finalizado
+  const [sortKey, setSortKey]           = useState<SortKey>('name')
+  const [sortDir, setSortDir]           = useState<SortDir>('asc')
+  const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [nameFilter, setNameFilter]     = useState('')
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['projects'],
@@ -66,6 +67,10 @@ export default function ProjectsPage() {
       list = list.filter(p => p.status !== 'Finalizado')
     } else if (statusFilter !== 'all') {
       list = list.filter(p => p.status === statusFilter)
+    }
+    if (nameFilter.trim()) {
+      const q = nameFilter.trim().toLowerCase()
+      list = list.filter(p => p.name.toLowerCase().includes(q))
     }
     list.sort((a, b) => {
       let va: string | number, vb: string | number
@@ -119,7 +124,26 @@ export default function ProjectsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-4 mb-4">
+        {/* Name search */}
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-2.5 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar proyecto..."
+            value={nameFilter}
+            onChange={e => setNameFilter(e.target.value)}
+            className="pl-8 pr-7 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:border-[#0170B9] w-52"
+          />
+          {nameFilter && (
+            <button onClick={() => setNameFilter('')} className="absolute right-2 text-gray-400 hover:text-gray-600">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        <div className="w-px h-5 bg-gray-200" />
+        <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm font-medium text-gray-600">Estado:</span>
         <div className="flex gap-1.5 flex-wrap">
           <button
@@ -155,6 +179,7 @@ export default function ProjectsPage() {
               {s}
             </button>
           ))}
+        </div>
         </div>
       </div>
 
