@@ -68,6 +68,12 @@ export default function GanttTable({ onNewAssignment, onNewProject, onEditAssign
     })
   }, [filteredAssignments])
 
+  // Only show resources that have at least one visible assignment
+  const resourcesInView = useMemo(() => {
+    const ids = new Set(filteredAssignments.map((a) => a.resourceId))
+    return data ? data.resources.filter((r) => ids.has(r.id)) : []
+  }, [filteredAssignments, data])
+
   const handleDeleteAssignment = useCallback(async (id: number) => {
     await fetch(`/api/assignments/${id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['gantt'] })
@@ -168,7 +174,7 @@ export default function GanttTable({ onNewAssignment, onNewProject, onEditAssign
             </tr>
 
             <UtilizationSection
-              resources={data.resources}
+              resources={resourcesInView}
               days={days}
               utilization={utilization}
             />

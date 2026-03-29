@@ -90,7 +90,7 @@ export default function ProjectsPage() {
       return 0
     })
     return list
-  }, [projects, statusFilter, sortKey, sortDir])
+  }, [projects, statusFilter, nameFilter, sortKey, sortDir])
 
   const totalHours = filtered.reduce((s, p) => s + p.estimatedHours, 0)
   const totalCost  = filtered.reduce((s, p) => s + p.estimatedHours * p.costPerHour, 0)
