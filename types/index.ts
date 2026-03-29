@@ -121,7 +121,7 @@ export interface ParsedTimeEntry {
   hours: number
 }
 
-export type ProjectStatus = 'En ejecución' | 'Próximo' | 'En planificación' | 'Continuo' | 'Finalizado'
+export type ProjectStatus = 'En ejecución' | 'Próximo' | 'En planificación' | 'Continuo' | 'Finalizado' | 'No Facturable'
 export type ProjectPriority = 'Alta' | 'Media' | 'Baja'
 export type Country = 'Argentina' | 'Uruguay' | 'Chile' | 'Otro'
 
@@ -131,13 +131,16 @@ export const STATUS_COLORS: Record<string, string> = {
   'En planificación': '#FFC7CE',
   'Continuo': '#FCE4D6',
   'Finalizado': '#E0E0E0',
+  'No Facturable': '#F3F4F6',
 }
 
 export interface ControlHorasProject {
   projectId: number
   projectName: string
   projectColor: string
+  projectStatus: string
   budgetHours: number | null
+  budgetIsEstimated: boolean  // true when budget derived from estimatedHours (no explicit budgetHours set)
   monthlyGross: Record<string, number>
   monthlyBillable: Record<string, number>
   totalGross: number

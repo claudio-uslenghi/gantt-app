@@ -11,7 +11,7 @@ export async function GET() {
       orderBy: { date: 'asc' },
     }),
     prisma.project.findMany({
-      select: { id: true, name: true, color: true, budgetHours: true },
+      select: { id: true, name: true, color: true, status: true, budgetHours: true, estimatedHours: true },
       orderBy: { name: 'asc' },
     }),
   ])
@@ -33,23 +33,33 @@ export async function GET() {
   const months = Array.from(allMonths).sort()
 
   const projectsData: ControlHorasProject[] = projects
-    .filter((p) => monthlyGrossMap.has(p.id))
+    .filter((p) => p.status !== 'No Facturable')           // exclude no-billable projects
+    .filter((p) => monthlyGrossMap.has(p.id))              // only projects with entries
     .map((p) => {
       const gross = monthlyGrossMap.get(p.id)!
-      const budget = p.budgetHours // null = unlimited, 0 = no-billable
+
+      // Effective budget:
+      // - Continuo → unlimited (null)
+      // - explicit budgetHours set → use that
+      // - otherwise → use estimatedHours as cap
+      const budgetIsEstimated = p.status !== 'Continuo' && p.budgetHours === null
+      const effectiveBudget: number | null =
+        p.status === 'Continuo'   ? null :
+        p.budgetHours !== null    ? p.budgetHours :
+        p.estimatedHours
 
       const monthlyGross: Record<string, number> = {}
       const monthlyBillable: Record<string, number> = {}
 
-      let remaining = budget === null ? Infinity : budget
+      let remaining = effectiveBudget === null ? Infinity : effectiveBudget
 
       for (const month of months) {
         const grossH = gross.get(month) ?? 0
         monthlyGross[month] = grossH
 
-        if (budget === null) {
+        if (effectiveBudget === null) {
           monthlyBillable[month] = grossH
-        } else if (budget === 0) {
+        } else if (effectiveBudget === 0) {
           monthlyBillable[month] = 0
         } else {
           const billable = Math.min(grossH, Math.max(0, remaining))
@@ -63,10 +73,10 @@ export async function GET() {
       const surplus = totalGross - totalBillable
 
       let status: ControlHorasProject['status']
-      if (budget === null) status = 'unlimited'
-      else if (budget === 0) status = 'no-billable'
+      if (effectiveBudget === null) status = 'unlimited'
+      else if (effectiveBudget === 0) status = 'no-billable'
       else {
-        const pct = totalBillable / budget
+        const pct = totalBillable / effectiveBudget
         status = pct >= 1 ? 'exceeded' : pct >= 0.8 ? 'warning' : 'ok'
       }
 
@@ -74,7 +84,9 @@ export async function GET() {
         projectId: p.id,
         projectName: p.name,
         projectColor: p.color,
-        budgetHours: p.budgetHours,
+        projectStatus: p.status,
+        budgetHours: effectiveBudget,
+        budgetIsEstimated,
         monthlyGross,
         monthlyBillable,
         totalGross,

@@ -20,10 +20,10 @@ function fmtMonth(m: string) {
   return `${names[parseInt(mo) - 1]} ${y.slice(2)}`
 }
 
-function budgetLabel(b: number | null) {
+function budgetLabel(b: number | null, isEstimated: boolean) {
   if (b === null) return '∞'
   if (b === 0) return '🚫'
-  return String(b)
+  return isEstimated ? `${b} est.` : String(b)
 }
 
 function statusBadge(s: ControlHorasProject['status']) {
@@ -97,7 +97,7 @@ function TabAcumulado({ data }: { data: ControlHorasResponse }) {
                     <span className="font-medium">{p.projectName}</span>
                   </div>
                 </td>
-                <td className="px-3 py-1.5 text-right text-gray-600">{budgetLabel(p.budgetHours)}</td>
+                <td className="px-3 py-1.5 text-right text-gray-600">{budgetLabel(p.budgetHours, p.budgetIsEstimated)}</td>
                 {months.map((m) => {
                   const val = showBillable ? (p.monthlyBillable[m] ?? 0) : (p.monthlyGross[m] ?? 0)
                   return (
@@ -222,7 +222,7 @@ function TabMesActual({ data }: { data: ControlHorasResponse }) {
                     <span className="font-medium">{r.projectName}</span>
                   </div>
                 </td>
-                <td className="px-4 py-2 text-right text-gray-600">{budgetLabel(r.budgetHours)}</td>
+                <td className="px-4 py-2 text-right text-gray-600">{budgetLabel(r.budgetHours, r.budgetIsEstimated)}</td>
                 <td className="px-4 py-2 text-right">{fmt(r.gross)}</td>
                 <td className={`px-4 py-2 text-right font-semibold ${r.status === 'no-billable' ? 'text-gray-400' : 'text-blue-700'}`}>
                   {fmt(r.billable)}

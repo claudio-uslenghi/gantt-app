@@ -132,7 +132,7 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
             <div>
               <label className="block text-sm font-medium mb-1">Estado *</label>
               <select {...register('status')} className="w-full border rounded px-3 py-2 text-sm">
-                {['En ejecución', 'Próximo', 'En planificación', 'Continuo', 'Finalizado'].map((s) => (
+                {['En ejecución', 'Próximo', 'En planificación', 'Continuo', 'Finalizado', 'No Facturable'].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
               </select>
