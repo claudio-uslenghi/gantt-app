@@ -4,8 +4,12 @@ import Providers from '@/components/layout/Providers'
 import AuthLayout from '@/components/layout/AuthLayout'
 
 export const metadata: Metadata = {
-  title: 'Planificación de Proyectos',
-  description: 'Gestión de proyectos y recursos con vista Gantt diaria',
+  title: 'Zircon Planner',
+  description: 'Planificación de proyectos y recursos — Zircon Tech',
+  icons: {
+    icon: '/icon.jpg',
+    apple: '/icon.jpg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

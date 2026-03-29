@@ -57,10 +57,10 @@ export default function Sidebar() {
       <div className="flex items-center justify-between px-4 py-4 border-b border-white/20">
         {!collapsed && (
           <div className="flex flex-col">
-            <span className="font-semibold text-sm leading-tight text-white tracking-wide">
-              Planificación
+            <span className="font-bold text-sm leading-tight text-white tracking-wide">
+              Zircon Planner
             </span>
-            <span className="text-xs text-white/70 leading-tight">de Proyectos</span>
+            <span className="text-xs text-white/60 leading-tight">Zircon Tech</span>
           </div>
         )}
         <button
