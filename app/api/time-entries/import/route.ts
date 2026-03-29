@@ -40,11 +40,27 @@ export async function POST(req: NextRequest) {
   const resolved: ResolvedEntry[] = []
 
   for (const e of entries) {
-    const resourceId = resourceMap.get(e.resourceName.toLowerCase().trim())
+    let resourceId = resourceMap.get(e.resourceName.toLowerCase().trim())
+
+    // Fallback: match by email using "first-initial + last-name" convention
+    // e.g. "cuslenghi@zircon.tech" → prefix "cuslenghi" → matches "Claudio Uslenghi"
+    if (!resourceId && e.resourceEmail) {
+      const prefix = e.resourceEmail.split('@')[0].toLowerCase()
+      const found = resources.find((r) => {
+        const parts = r.name.toLowerCase().split(/\s+/)
+        if (parts.length >= 2) {
+          const initLast = parts[0][0] + parts[parts.length - 1]
+          return initLast === prefix
+        }
+        return r.name.toLowerCase().replace(/\s+/g, '') === prefix
+      })
+      if (found) resourceId = found.id
+    }
+
     const projectId = projectMap.get(e.projectName.toLowerCase().trim())
 
     if (!resourceId) {
-      unmatchedResources.add(e.resourceName)
+      unmatchedResources.add(e.resourceEmail ? `${e.resourceName} (${e.resourceEmail})` : e.resourceName)
       continue
     }
     if (!projectId) {

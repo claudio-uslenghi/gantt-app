@@ -63,6 +63,63 @@ function parseCsv(buffer: ArrayBuffer): ParsedTimeEntry[] {
   return entries
 }
 
+// ─── Clockify CSV Parsing ────────────────────────────────────────────────────
+
+function parseQuotedRow(line: string): string[] {
+  const result: string[] = []
+  let current = ''
+  let inQuotes = false
+  for (const c of line) {
+    if (c === '"') { inQuotes = !inQuotes }
+    else if (c === ',' && !inQuotes) { result.push(current.trim()); current = '' }
+    else { current += c }
+  }
+  result.push(current.trim())
+  return result
+}
+
+function parseClockifyCsv(buffer: ArrayBuffer): ParsedTimeEntry[] {
+  const bytes = new Uint8Array(buffer)
+  const start = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0
+  const text = new TextDecoder('utf-8').decode(bytes.slice(start))
+
+  const lines = text.split(/\r?\n/).filter((l) => l.trim())
+  if (lines.length < 2) return []
+
+  // Aggregate by email+project+date (multiple time entries per day → sum)
+  const agg = new Map<string, ParsedTimeEntry>()
+
+  for (let r = 1; r < lines.length; r++) {
+    const cols = parseQuotedRow(lines[r])
+    const projectName = cols[0]?.trim() ?? ''
+    const userName    = cols[5]?.trim() ?? ''
+    const email       = cols[7]?.trim() ?? ''
+    const dateRaw     = cols[10]?.trim() ?? '' // DD/MM/YYYY
+    const hoursRaw    = cols[15]?.trim() ?? '' // decimal
+
+    if (!projectName || !dateRaw || (!userName && !email)) continue
+    const hours = parseFloat(hoursRaw)
+    if (isNaN(hours) || hours <= 0) continue
+
+    // Parse DD/MM/YYYY
+    const parts = dateRaw.split('/')
+    if (parts.length !== 3) continue
+    const [d, m, y] = parts.map(Number)
+    if (!d || !m || !y) continue
+    const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toISOString()
+
+    const key = `${email || userName}|${projectName}|${date}`
+    const existing = agg.get(key)
+    if (existing) {
+      existing.hours = Math.round((existing.hours + hours) * 100) / 100
+    } else {
+      agg.set(key, { resourceName: userName, resourceEmail: email, projectName, date, hours })
+    }
+  }
+
+  return Array.from(agg.values())
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatHours(h: number) {
@@ -83,6 +140,7 @@ function formatMonth(ym: string) {
 // ─── Tab: Importar ───────────────────────────────────────────────────────────
 
 function TabImport() {
+  const [showClockify, setShowClockify] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [parsed, setParsed] = useState<ParsedTimeEntry[] | null>(null)
   const [fileName, setFileName] = useState('')
@@ -268,6 +326,200 @@ function TabImport() {
           {error}
         </div>
       )}
+
+      {/* Divider */}
+      <div className="border-t border-gray-200 pt-4">
+        <button
+          onClick={() => setShowClockify((v) => !v)}
+          className="flex items-center gap-2 text-sm font-medium text-purple-600 hover:text-purple-800"
+        >
+          <Upload size={15} />
+          {showClockify ? 'Ocultar importación Clockify' : 'Importar desde Clockify'}
+        </button>
+        {showClockify && <div className="mt-4"><ClockifyImport /></div>}
+      </div>
+
+      {/* Delete by month */}
+      <div className="border-t border-gray-200 pt-4">
+        <DeleteByMonth />
+      </div>
+    </div>
+  )
+}
+
+// ─── Clockify Import Block ───────────────────────────────────────────────────
+
+function ClockifyImport() {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [parsed, setParsed] = useState<ParsedTimeEntry[] | null>(null)
+  const [fileName, setFileName] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [result, setResult] = useState<ImportTimeEntriesResult | null>(null)
+  const [error, setError] = useState('')
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name); setResult(null); setError('')
+    const reader = new FileReader()
+    reader.onload = (e) => setParsed(parseClockifyCsv(e.target?.result as ArrayBuffer))
+    reader.readAsArrayBuffer(file)
+  }, [])
+
+  const handleImport = async () => {
+    if (!parsed) return
+    setImporting(true); setError('')
+    try {
+      const res = await fetch('/api/time-entries/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: parsed }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al importar')
+      setResult(data); setParsed(null); setFileName('')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const uniqueResources = parsed ? new Set(parsed.map((e) => e.resourceEmail ?? e.resourceName)).size : 0
+  const uniqueProjects  = parsed ? new Set(parsed.map((e) => e.projectName)).size : 0
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-5 space-y-4 bg-white">
+      <div className="flex items-center gap-2">
+        <span className="text-base font-semibold text-gray-700">Clockify</span>
+        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">CSV detallado</span>
+      </div>
+
+      <div
+        onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
+        onDragOver={(e) => e.preventDefault()}
+        onClick={() => fileRef.current?.click()}
+        className="border-2 border-dashed border-purple-200 rounded-lg p-6 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors"
+      >
+        <Upload className="mx-auto mb-2 text-purple-400" size={28} />
+        <p className="text-sm text-gray-600 font-medium">Arrastrá el CSV de Clockify o hacé clic</p>
+        <p className="text-xs text-gray-400 mt-1">Formato: Proyecto, Usuario, Correo electrónico, Fecha de inicio, Duración (decimal)...</p>
+        <input ref={fileRef} type="file" accept=".csv" className="hidden"
+          onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      </div>
+
+      {parsed && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <FileText size={16} className="text-purple-500" />
+            <span className="font-medium">{fileName}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Entradas agrupadas', value: parsed.length.toLocaleString() },
+              { label: 'Personas únicas', value: uniqueResources },
+              { label: 'Proyectos únicos', value: uniqueProjects },
+            ].map((s) => (
+              <div key={s.label} className="bg-purple-50 rounded-lg p-3 text-center">
+                <div className="text-xl font-bold text-purple-600">{s.value}</div>
+                <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">Las horas del mismo recurso/proyecto/día se sumaron automáticamente.</p>
+          <button onClick={handleImport} disabled={importing}
+            className="w-full bg-purple-600 text-white py-2 rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50 text-sm">
+            {importing ? 'Importando...' : `Importar ${parsed.length.toLocaleString()} entradas`}
+          </button>
+        </div>
+      )}
+
+      {result && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-green-700 font-semibold text-sm">
+            <CheckCircle2 size={16} /> Importación Clockify completada
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Insertados', value: result.inserted, color: 'text-green-600' },
+              { label: 'Actualizados', value: result.updated, color: 'text-blue-600' },
+              { label: 'Saltados', value: result.skipped, color: 'text-gray-500' },
+            ].map((s) => (
+              <div key={s.label} className="border rounded p-2 text-center">
+                <div className={`text-lg font-bold ${s.color}`}>{s.value.toLocaleString()}</div>
+                <div className="text-xs text-gray-500">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {result.unmatchedResources.length > 0 && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm">
+              <div className="flex items-center gap-1 text-yellow-700 font-medium mb-1">
+                <AlertTriangle size={14} /> Personas sin match
+              </div>
+              <div className="text-yellow-800 text-xs">{result.unmatchedResources.join(', ')}</div>
+              <p className="text-xs text-yellow-600 mt-1">Verificá que el nombre del recurso en la DB coincida con el email de Clockify (ej: cuslenghi@zircon.tech → Claudio Uslenghi).</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm">{error}</div>}
+    </div>
+  )
+}
+
+// ─── Delete by Month Block ────────────────────────────────────────────────────
+
+function DeleteByMonth() {
+  const [month, setMonth] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [result, setResult] = useState<{ deleted: number; month: string } | null>(null)
+  const [error, setError] = useState('')
+
+  const handleDelete = async () => {
+    if (!month) return
+    const label = month // YYYY-MM
+    if (!confirm(`¿Eliminar TODAS las horas del mes ${label}? Esta acción no se puede deshacer.`)) return
+    setDeleting(true); setError(''); setResult(null)
+    try {
+      const res = await fetch(`/api/time-entries?month=${label}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al eliminar')
+      setResult(data)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="border border-red-200 rounded-lg p-5 bg-white space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-base font-semibold text-gray-700">Eliminar horas por mes</span>
+        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">Irreversible</span>
+      </div>
+      <p className="text-sm text-gray-500">Eliminá todas las horas registradas de un mes específico para poder volver a importarlas.</p>
+      <div className="flex items-center gap-3">
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => { setMonth(e.target.value); setResult(null) }}
+          className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+        />
+        <button
+          onClick={handleDelete}
+          disabled={!month || deleting}
+          className="px-4 py-1.5 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 disabled:opacity-40 transition-colors"
+        >
+          {deleting ? 'Eliminando...' : 'Eliminar mes'}
+        </button>
+      </div>
+      {result && (
+        <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-700 flex items-center gap-2">
+          <CheckCircle2 size={16} />
+          Se eliminaron <strong>{result.deleted.toLocaleString()}</strong> registros del mes {result.month}.
+        </div>
+      )}
+      {error && <div className="bg-red-50 border border-red-200 rounded p-3 text-red-700 text-sm">{error}</div>}
     </div>
   )
 }

@@ -114,6 +114,7 @@ export interface ImportTimeEntriesResult {
 
 export interface ParsedTimeEntry {
   resourceName: string
+  resourceEmail?: string   // optional: used by Clockify import for email-based matching
   projectName: string
   date: string
   hours: number

@@ -1,8 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth-options'
 import { prisma } from '@/lib/prisma'
 import type { TimeEntryByResource, TimeEntryByProject, TimeEntryByMonth } from '@/types'
 
 export const dynamic = 'force-dynamic'
+
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions)
+  const roles = (session?.user as { roles?: string[] })?.roles ?? []
+  if (!roles.includes('admin')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { searchParams } = req.nextUrl
+  const month = searchParams.get('month') // YYYY-MM
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+    return NextResponse.json({ error: 'Parámetro month inválido (YYYY-MM)' }, { status: 400 })
+  }
+
+  const [y, m] = month.split('-').map(Number)
+  const from = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0))
+  const to   = new Date(Date.UTC(y, m,     0, 23, 59, 59))
+
+  const { count } = await prisma.timeEntry.deleteMany({
+    where: { date: { gte: from, lte: to } },
+  })
+
+  return NextResponse.json({ deleted: count, month })
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
