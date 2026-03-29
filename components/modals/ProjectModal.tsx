@@ -17,6 +17,7 @@ const schema = z.object({
   endDate: z.string().min(1),
   estimatedHours: z.coerce.number().min(1),
   costPerHour: z.coerce.number().min(0),
+  budgetHours: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -61,6 +62,7 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
         endDate: editProject.endDate.split('T')[0],
         estimatedHours: editProject.estimatedHours,
         costPerHour: editProject.costPerHour,
+        budgetHours: editProject.budgetHours != null ? String(editProject.budgetHours) : '',
         notes: editProject.notes,
       })
     } else {
@@ -72,10 +74,14 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
   const onSubmit = async (data: FormData) => {
     const url = editProject ? `/api/projects/${editProject.id}` : '/api/projects'
     const method = editProject ? 'PUT' : 'POST'
+    const payload = {
+      ...data,
+      budgetHours: data.budgetHours === '' || data.budgetHours == null ? null : Number(data.budgetHours),
+    }
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     })
     if (res.ok) {
       qc.invalidateQueries({ queryKey: ['gantt'] })
@@ -162,6 +168,19 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
               <label className="block text-sm font-medium mb-1">Costo por hora (USD)</label>
               <input type="number" step="0.01" {...register('costPerHour')} className="w-full border rounded px-3 py-2 text-sm" />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Presupuesto horas facturables</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Dejar vacío = sin límite (∞)"
+              {...register('budgetHours')}
+              className="w-full border rounded px-3 py-2 text-sm"
+            />
+            <p className="text-xs text-gray-400 mt-1">Vacío = sin límite · 0 = no facturable</p>
           </div>
 
           <div>

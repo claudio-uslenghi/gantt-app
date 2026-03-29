@@ -32,6 +32,7 @@ model Project {
   endDate        DateTime
   estimatedHours Int
   costPerHour    Float    @default(0)
+  budgetHours    Float?
   notes          String   @default("")
   createdAt      DateTime @default(now())
 

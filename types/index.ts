@@ -17,6 +17,7 @@ export interface Project {
   endDate: string
   estimatedHours: number
   costPerHour: number
+  budgetHours: number | null
   notes: string
   createdAt: string
 }
@@ -130,6 +131,24 @@ export const STATUS_COLORS: Record<string, string> = {
   'En planificación': '#FFC7CE',
   'Continuo': '#FCE4D6',
   'Finalizado': '#E0E0E0',
+}
+
+export interface ControlHorasProject {
+  projectId: number
+  projectName: string
+  projectColor: string
+  budgetHours: number | null
+  monthlyGross: Record<string, number>
+  monthlyBillable: Record<string, number>
+  totalGross: number
+  totalBillable: number
+  surplus: number
+  status: 'ok' | 'warning' | 'exceeded' | 'unlimited' | 'no-billable'
+}
+
+export interface ControlHorasResponse {
+  months: string[]
+  projects: ControlHorasProject[]
 }
 
 export const PROJECT_PALETTE = [

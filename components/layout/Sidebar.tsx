@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useSession, signOut } from 'next-auth/react'
@@ -33,6 +34,7 @@ const ADMIN_ITEMS = [
   { href: '/admin/roles', icon: Shield, label: 'Roles' },
   { href: '/admin/permissions', icon: KeyRound, label: 'Permisos' },
   { href: '/admin/hours', icon: Clock, label: 'Reporte de Horas' },
+  { href: '/admin/control-horas', icon: TrendingUp, label: 'Control de Horas' },
 ]
 
 export default function Sidebar() {
