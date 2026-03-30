@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useRef, useCallback, Fragment } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { parse as dateParse } from 'date-fns'
 import { enUS } from 'date-fns/locale'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { Upload, AlertTriangle, CheckCircle2, FileText } from 'lucide-react'
+import { Upload, AlertTriangle, CheckCircle2, FileText, Pencil, Trash2, Check, X } from 'lucide-react'
 import type {
   ParsedTimeEntry, ImportTimeEntriesResult,
   TimeEntryByResource, TimeEntryByProject, TimeEntryByMonth,
@@ -526,100 +526,136 @@ function DeleteByMonth() {
 
 // ─── Tab: Tabla ──────────────────────────────────────────────────────────────
 
+type RawEntry = {
+  id: number
+  resourceId: number
+  projectId: number
+  date: string
+  hours: number
+  resource: { id: number; name: string; color: string }
+  project:  { id: number; name: string; color: string }
+}
+
+type EditForm = { resourceId: string; projectId: string; date: string; hours: string }
+
 function TabTabla() {
+  const qc = useQueryClient()
   const [resourceId, setResourceId] = useState('')
-  const [projectId, setProjectId] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [month, setMonth] = useState('')
-  const [page, setPage] = useState(1)
+  const [projectId,  setProjectId]  = useState('')
+  const [dateFrom,   setDateFrom]   = useState('')
+  const [dateTo,     setDateTo]     = useState('')
+  const [month,      setMonth]      = useState('')
+  const [page,       setPage]       = useState(1)
 
-  const { data: resources } = useQuery({
-    queryKey: ['resources'],
-    queryFn: () => fetch('/api/resources').then((r) => r.json()),
-  })
-  const { data: projects } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => fetch('/api/projects').then((r) => r.json()),
-  })
+  // edit state
+  const [editingId,  setEditingId]  = useState<number | null>(null)
+  const [editForm,   setEditForm]   = useState<EditForm>({ resourceId: '', projectId: '', date: '', hours: '' })
+  const [saving,     setSaving]     = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
+  const { data: resources } = useQuery({ queryKey: ['resources'], queryFn: () => fetch('/api/resources').then((r) => r.json()) })
+  const { data: projects }  = useQuery({ queryKey: ['projects'],  queryFn: () => fetch('/api/projects').then((r) => r.json()) })
+
+  const rawKey = ['time-entries', 'raw', resourceId, projectId, dateFrom, dateTo, month, page]
   const params = new URLSearchParams({
-    view: 'raw',
-    page: String(page),
-    pageSize: '100',
+    view: 'raw', page: String(page), pageSize: '100',
     ...(resourceId && { resourceId }),
-    ...(projectId && { projectId }),
+    ...(projectId  && { projectId }),
     ...(month ? { month } : {}),
-    ...((!month && dateFrom) ? { dateFrom } : {}),
-    ...((!month && dateTo) ? { dateTo } : {}),
+    ...(!month && dateFrom ? { dateFrom } : {}),
+    ...(!month && dateTo   ? { dateTo }   : {}),
   })
 
   const { data, isFetching } = useQuery({
-    queryKey: ['time-entries', 'raw', resourceId, projectId, dateFrom, dateTo, month, page],
+    queryKey: rawKey,
     queryFn: () => fetch(`/api/time-entries?${params}`).then((r) => r.json()),
   })
 
-  const entries = data?.entries ?? []
-  const total = data?.total ?? 0
+  const entries: RawEntry[] = data?.entries ?? []
+  const total      = data?.total ?? 0
   const totalPages = Math.ceil(total / 100)
-
-  const totalHours = entries.reduce((sum: number, e: { hours: number }) => sum + e.hours, 0)
+  const totalHours = entries.reduce((s, e) => s + e.hours, 0)
 
   const clearFilters = () => {
     setResourceId(''); setProjectId(''); setDateFrom(''); setDateTo(''); setMonth(''); setPage(1)
+  }
+
+  const startEdit = (e: RawEntry) => {
+    setEditingId(e.id)
+    setEditForm({
+      resourceId: String(e.resourceId),
+      projectId:  String(e.projectId),
+      date:       e.date.substring(0, 10),
+      hours:      String(e.hours),
+    })
+  }
+
+  const cancelEdit = () => { setEditingId(null); setSaving(false) }
+
+  const saveEdit = async () => {
+    if (!editingId) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/time-entries/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceId: Number(editForm.resourceId),
+          projectId:  Number(editForm.projectId),
+          date:       new Date(editForm.date + 'T12:00:00Z').toISOString(),
+          hours:      Number(editForm.hours),
+        }),
+      })
+      if (!res.ok) throw new Error('Error al guardar')
+      qc.invalidateQueries({ queryKey: ['time-entries'] })
+      setEditingId(null)
+    } catch {
+      alert('Error al guardar el registro')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const deleteEntry = async (id: number) => {
+    if (!confirm('¿Eliminar este registro de horas?')) return
+    setDeletingId(id)
+    try {
+      await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
+      qc.invalidateQueries({ queryKey: ['time-entries'] })
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
     <div className="space-y-4">
       {/* Filters */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <select
-          value={resourceId}
-          onChange={(e) => { setResourceId(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded px-2 py-1.5 text-sm"
-        >
+        <select value={resourceId} onChange={(e) => { setResourceId(e.target.value); setPage(1) }}
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm">
           <option value="">Todas las personas</option>
-          {resources?.map((r: { id: number; name: string }) => (
+          {(resources ?? []).map((r: { id: number; name: string }) => (
             <option key={r.id} value={r.id}>{r.name}</option>
           ))}
         </select>
-        <select
-          value={projectId}
-          onChange={(e) => { setProjectId(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded px-2 py-1.5 text-sm"
-        >
+        <select value={projectId} onChange={(e) => { setProjectId(e.target.value); setPage(1) }}
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm">
           <option value="">Todos los proyectos</option>
-          {projects?.map((p: { id: number; name: string }) => (
+          {(projects ?? []).map((p: { id: number; name: string }) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <input
-          type="month"
-          value={month}
+        <input type="month" value={month}
           onChange={(e) => { setMonth(e.target.value); setDateFrom(''); setDateTo(''); setPage(1) }}
-          className="border border-gray-300 rounded px-2 py-1.5 text-sm"
-          placeholder="Mes"
-        />
-        <input
-          type="date"
-          value={dateFrom}
-          disabled={!!month}
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
+        <input type="date" value={dateFrom} disabled={!!month}
           onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded px-2 py-1.5 text-sm disabled:opacity-40"
-          placeholder="Desde"
-        />
-        <input
-          type="date"
-          value={dateTo}
-          disabled={!!month}
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm disabled:opacity-40" />
+        <input type="date" value={dateTo} disabled={!!month}
           onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-          className="border border-gray-300 rounded px-2 py-1.5 text-sm disabled:opacity-40"
-          placeholder="Hasta"
-        />
-        <button
-          onClick={clearFilters}
-          className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-3 py-1.5"
-        >
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm disabled:opacity-40" />
+        <button onClick={clearFilters}
+          className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-3 py-1.5">
           Limpiar filtros
         </button>
       </div>
@@ -630,9 +666,7 @@ function TabTabla() {
           <span className="text-sm text-gray-600">
             {isFetching ? 'Cargando...' : `${total.toLocaleString()} registros`}
           </span>
-          <span className="text-sm font-semibold text-[#0170B9]">
-            Total: {formatHours(totalHours)} hs
-          </span>
+          <span className="text-sm font-semibold text-[#0170B9]">Total: {formatHours(totalHours)} hs</span>
         </div>
         <div className="overflow-x-auto max-h-[500px]">
           <table className="w-full text-sm">
@@ -642,42 +676,90 @@ function TabTabla() {
                 <th className="px-4 py-2 text-left">Proyecto</th>
                 <th className="px-4 py-2 text-left">Fecha</th>
                 <th className="px-4 py-2 text-right">Horas</th>
+                <th className="px-3 py-2 w-20"></th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((e: {
-                id: number
-                date: string
-                hours: number
-                resource: { name: string; color: string }
-                project: { name: string; color: string }
-              }) => (
-                <tr key={e.id} className="border-t hover:bg-gray-50">
-                  <td className="px-4 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: e.resource.color }}
-                      />
-                      {e.resource.name}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: e.project.color }}
-                      />
-                      {e.project.name}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-gray-600">{formatDateDisplay(e.date)}</td>
-                  <td className="px-4 py-2 text-right font-medium">{formatHours(e.hours)}</td>
-                </tr>
+              {entries.map((e) => (
+                editingId === e.id ? (
+                  /* ── Edit row ── */
+                  <tr key={e.id} className="border-t bg-blue-50">
+                    <td className="px-2 py-1.5">
+                      <select value={editForm.resourceId}
+                        onChange={(ev) => setEditForm((f) => ({ ...f, resourceId: ev.target.value }))}
+                        className="border rounded px-2 py-1 text-xs w-full">
+                        {(resources ?? []).map((r: { id: number; name: string }) => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <select value={editForm.projectId}
+                        onChange={(ev) => setEditForm((f) => ({ ...f, projectId: ev.target.value }))}
+                        className="border rounded px-2 py-1 text-xs w-full">
+                        {(projects ?? []).map((p: { id: number; name: string }) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="date" value={editForm.date}
+                        onChange={(ev) => setEditForm((f) => ({ ...f, date: ev.target.value }))}
+                        className="border rounded px-2 py-1 text-xs w-full" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" step="0.5" min="0" value={editForm.hours}
+                        onChange={(ev) => setEditForm((f) => ({ ...f, hours: ev.target.value }))}
+                        className="border rounded px-2 py-1 text-xs w-20 text-right" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <button onClick={saveEdit} disabled={saving}
+                          className="p-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50" title="Guardar">
+                          <Check size={13} />
+                        </button>
+                        <button onClick={cancelEdit}
+                          className="p-1.5 rounded bg-gray-200 text-gray-600 hover:bg-gray-300" title="Cancelar">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  /* ── View row ── */
+                  <tr key={e.id} className="border-t hover:bg-gray-50 group">
+                    <td className="px-4 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: e.resource.color }} />
+                        {e.resource.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: e.project.color }} />
+                        {e.project.name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-gray-600">{formatDateDisplay(e.date)}</td>
+                    <td className="px-4 py-2 text-right font-medium">{formatHours(e.hours)}</td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEdit(e)}
+                          className="p-1.5 rounded text-blue-500 hover:bg-blue-100" title="Editar">
+                          <Pencil size={13} />
+                        </button>
+                        <button onClick={() => deleteEntry(e.id)} disabled={deletingId === e.id}
+                          className="p-1.5 rounded text-red-500 hover:bg-red-100 disabled:opacity-40" title="Eliminar">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
               ))}
               {entries.length === 0 && !isFetching && (
                 <tr>
-                  <td colSpan={4} className="text-center py-8 text-gray-400">
+                  <td colSpan={5} className="text-center py-8 text-gray-400">
                     No hay datos con los filtros seleccionados
                   </td>
                 </tr>
@@ -685,22 +767,15 @@ function TabTabla() {
             </tbody>
           </table>
         </div>
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="text-sm px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100"
-            >
+            <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
+              className="text-sm px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100">
               ← Anterior
             </button>
             <span className="text-sm text-gray-600">Página {page} de {totalPages}</span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="text-sm px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100"
-            >
+            <button disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}
+              className="text-sm px-3 py-1 border rounded disabled:opacity-40 hover:bg-gray-100">
               Siguiente →
             </button>
           </div>
@@ -1255,12 +1330,11 @@ function TabDiaria() {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
-type Tab = 'import' | 'table' | 'daily' | 'summary' | 'charts'
+type Tab = 'import' | 'table' | 'summary' | 'charts'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'import',  label: 'Importar' },
   { key: 'table',   label: 'Tabla' },
-  { key: 'daily',   label: 'Vista Diaria' },
   { key: 'summary', label: 'Resumen' },
   { key: 'charts',  label: 'Gráficos' },
 ]
@@ -1297,7 +1371,6 @@ export default function HoursPage() {
       {/* Content */}
       {activeTab === 'import'  && <TabImport />}
       {activeTab === 'table'   && <TabTabla />}
-      {activeTab === 'daily'   && <TabDiaria />}
       {activeTab === 'summary' && <TabResumen />}
       {activeTab === 'charts'  && <TabGraficos />}
     </div>

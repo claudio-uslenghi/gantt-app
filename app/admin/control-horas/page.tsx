@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown, X } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -363,17 +364,110 @@ function TabDashboard({ data }: { data: ControlHorasResponse }) {
   )
 }
 
+// ─── Project multi-select filter ──────────────────────────────────────────────
+
+interface ProjectFilterProps {
+  allProjects: ControlHorasProject[]
+  selected: Set<number>
+  onChange: (s: Set<number>) => void
+}
+
+function ProjectFilter({ allProjects, selected, onChange }: ProjectFilterProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const allSelected = selected.size === 0
+  const label = allSelected
+    ? 'Todos los proyectos'
+    : `${selected.size} proyecto${selected.size !== 1 ? 's' : ''}`
+
+  const toggle = (id: number) => {
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onChange(next)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm bg-white hover:border-[#0170B9] transition-colors min-w-[180px]"
+      >
+        <span className="flex-1 text-left text-gray-700">{label}</span>
+        {!allSelected && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onChange(new Set()) }}
+            className="text-gray-400 hover:text-gray-700 cursor-pointer"
+          >
+            <X size={13} />
+          </span>
+        )}
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[240px] max-h-72 overflow-y-auto">
+          {/* All option */}
+          <button
+            onClick={() => { onChange(new Set()); setOpen(false) }}
+            className={`w-full flex items-center px-3 py-2 text-sm hover:bg-gray-50 border-b ${allSelected ? 'font-semibold text-[#0170B9]' : 'text-gray-700'}`}
+          >
+            Todos los proyectos
+          </button>
+          {/* Individual projects */}
+          {allProjects.map((p) => (
+            <label key={p.projectId} className="flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.has(p.projectId)}
+                onChange={() => toggle(p.projectId)}
+                className="rounded"
+              />
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: p.projectColor }}
+              />
+              <span className="truncate text-gray-700">{p.projectName}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 type Tab = 'acumulado' | 'mes-actual' | 'dashboard'
 
 export default function ControlHorasPage() {
   const [tab, setTab] = useState<Tab>('acumulado')
+  const [selectedProjects, setSelectedProjects] = useState<Set<number>>(new Set())
 
   const { data, isLoading, error } = useQuery<ControlHorasResponse>({
     queryKey: ['control-horas'],
     queryFn: () => fetch('/api/control-horas').then((r) => r.json()),
   })
+
+  // Apply project filter across all tabs
+  const filteredData = useMemo<ControlHorasResponse | null>(() => {
+    if (!data) return null
+    if (selectedProjects.size === 0) return data
+    return {
+      ...data,
+      projects: data.projects.filter((p) => selectedProjects.has(p.projectId)),
+    }
+  }, [data, selectedProjects])
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'acumulado', label: 'Acumulado' },
@@ -390,21 +484,32 @@ export default function ControlHorasPage() {
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b mb-5">
-        {tabs.map(({ id, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              tab === id
-                ? 'border-[#0170B9] text-[#0170B9]'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* Tabs + Project filter */}
+      <div className="flex items-end justify-between border-b mb-5">
+        <div className="flex gap-1">
+          {tabs.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                tab === id
+                  ? 'border-[#0170B9] text-[#0170B9]'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {data && data.projects.length > 0 && (
+          <div className="pb-2">
+            <ProjectFilter
+              allProjects={data.projects}
+              selected={selectedProjects}
+              onChange={setSelectedProjects}
+            />
+          </div>
+        )}
       </div>
 
       {isLoading && (
@@ -426,12 +531,21 @@ export default function ControlHorasPage() {
         </div>
       )}
 
-      {data && data.projects.length > 0 && (
+      {filteredData && filteredData.projects.length > 0 && (
         <>
-          {tab === 'acumulado' && <TabAcumulado data={data} />}
-          {tab === 'mes-actual' && <TabMesActual data={data} />}
-          {tab === 'dashboard' && <TabDashboard data={data} />}
+          {tab === 'acumulado' && <TabAcumulado data={filteredData} />}
+          {tab === 'mes-actual' && <TabMesActual data={filteredData} />}
+          {tab === 'dashboard' && <TabDashboard data={filteredData} />}
         </>
+      )}
+
+      {filteredData && filteredData.projects.length === 0 && data && data.projects.length > 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <p className="text-lg font-medium">Sin proyectos para el filtro seleccionado</p>
+          <button onClick={() => setSelectedProjects(new Set())} className="text-sm text-[#0170B9] hover:underline mt-1">
+            Mostrar todos
+          </button>
+        </div>
       )}
     </div>
   )
