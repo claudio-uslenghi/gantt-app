@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
-import { Pencil, Trash2, Plus, UserCheck, UserX } from 'lucide-react'
+import { Pencil, Trash2, Plus, UserCheck, UserX, Eye, EyeOff } from 'lucide-react'
 
 interface Role {
   id: number
@@ -35,6 +35,7 @@ function UserModal({
   const [name, setName] = useState(user?.name ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [active, setActive] = useState(user?.active ?? true)
   const [selectedRoles, setSelectedRoles] = useState<number[]>(
     user?.roles.map((r) => r.id) ?? []
@@ -113,13 +114,24 @@ function UserModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               {isEdit ? 'Nueva contraseña (dejar vacío para no cambiar)' : 'Contraseña'}
             </label>
-            <input
-              type="password"
-              required={!isEdit}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required={!isEdit}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
           </div>
 
           {isEdit && (

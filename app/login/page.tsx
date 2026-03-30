@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 function LoginForm() {
   const router = useRouter()
@@ -12,6 +13,7 @@ function LoginForm() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -95,18 +97,29 @@ function LoginForm() {
             >
               Contraseña
             </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none"
-              onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #0170B9')}
-              onBlur={(e) => (e.target.style.boxShadow = '')}
-              placeholder="••••••••"
-            />
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none"
+                onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #0170B9')}
+                onBlur={(e) => (e.target.style.boxShadow = '')}
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                tabIndex={-1}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           {error && (
