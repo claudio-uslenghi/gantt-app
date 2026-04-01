@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, X, Download } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -142,43 +142,129 @@ function TabAcumulado({ data }: { data: ControlHorasResponse }) {
 
 // ─── Tab Mes Actual ────────────────────────────────────────────────────────────
 
+function fmtCost(n: number) {
+  if (n === 0) return '–'
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+}
+
+function exportToCsv(rows: ReturnType<typeof buildRows>, month: string) {
+  const headers = ['Tipo', 'Proyecto', 'Perfil', 'Recurso', 'Tarifa (USD/h)', 'Horas', 'Costo (USD)', 'Facturable']
+  const lines = [headers.join(',')]
+  for (const p of rows) {
+    const resources = p.monthlyResources[month] ?? []
+    lines.push([
+      `"${p.projectType === 't&m' ? 'T&M' : 'Precio Fijo'}"`,
+      `"${p.projectName}"`, '', '', '',
+      p.gross.toFixed(1),
+      p.totalCost.toFixed(2),
+      '',
+    ].join(','))
+    for (const r of resources) {
+      lines.push([
+        '',
+        `"${p.projectName}"`,
+        `"${r.profile}"`,
+        `"${r.resourceName}"`,
+        r.ratePerHour,
+        r.grossHours.toFixed(1),
+        r.cost.toFixed(2),
+        r.billable ? 'Sí' : 'No',
+      ].join(','))
+    }
+  }
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `control-horas-${month}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function buildRows(projects: ControlHorasProject[], selectedMonth: string) {
+  return projects
+    .filter((p) => (p.monthlyGross[selectedMonth] ?? 0) > 0)
+    .map((p) => ({
+      ...p,
+      gross: p.monthlyGross[selectedMonth] ?? 0,
+      billable: p.monthlyBillable[selectedMonth] ?? 0,
+      surplus: (p.monthlyGross[selectedMonth] ?? 0) - (p.monthlyBillable[selectedMonth] ?? 0),
+    }))
+    .sort((a, b) => b.gross - a.gross)
+}
+
 function TabMesActual({ data }: { data: ControlHorasResponse }) {
   const { months, projects } = data
   const [selectedMonth, setSelectedMonth] = useState(
     months.includes(currentMonth) ? currentMonth : (months[months.length - 1] ?? currentMonth)
   )
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  // Local billable overrides: key = `${projectId}:${resourceId}` → boolean
+  const [billableOverrides, setBillableOverrides] = useState<Map<string, boolean>>(new Map())
 
-  const rows = useMemo(() => {
-    return projects
-      .filter((p) => (p.monthlyGross[selectedMonth] ?? 0) > 0)
-      .map((p) => ({
-        ...p,
-        gross: p.monthlyGross[selectedMonth] ?? 0,
-        billable: p.monthlyBillable[selectedMonth] ?? 0,
-        surplus: (p.monthlyGross[selectedMonth] ?? 0) - (p.monthlyBillable[selectedMonth] ?? 0),
-      }))
-      .sort((a, b) => b.gross - a.gross)
-  }, [projects, selectedMonth])
+  const rows = useMemo(() => buildRows(projects, selectedMonth), [projects, selectedMonth])
+
+  function toggleExpand(id: number) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function getBillable(projectId: number, resourceId: number, defaultValue: boolean) {
+    const key = `${projectId}:${resourceId}`
+    return billableOverrides.has(key) ? billableOverrides.get(key)! : defaultValue
+  }
+
+  function toggleBillableOverride(projectId: number, resourceId: number, defaultValue: boolean) {
+    const key = `${projectId}:${resourceId}`
+    setBillableOverrides((prev) => {
+      const next = new Map(prev)
+      const current = prev.has(key) ? prev.get(key)! : defaultValue
+      next.set(key, !current)
+      return next
+    })
+  }
+
+  // Compute effective cost per project row (considering local overrides)
+  function getEffectiveCost(p: typeof rows[0]) {
+    const resources = p.monthlyResources[selectedMonth] ?? []
+    return resources.reduce((s, r) => {
+      const isBillable = getBillable(p.projectId, r.resourceId, r.billable)
+      return s + (isBillable ? r.grossHours * r.ratePerHour : 0)
+    }, 0)
+  }
 
   const totalGross = rows.reduce((s, r) => s + r.gross, 0)
   const totalBillable = rows.reduce((s, r) => s + r.billable, 0)
-  const totalSurplus = rows.reduce((s, r) => s + r.surplus, 0)
+  const totalCost = rows.reduce((s, r) => s + getEffectiveCost(r), 0)
   const totalInternal = rows.filter((r) => r.status === 'no-billable').reduce((s, r) => s + r.gross, 0)
 
   return (
     <div className="space-y-4">
-      {/* Month picker */}
-      <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-gray-700">Mes:</label>
-        <select
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          className="border rounded px-3 py-1.5 text-sm"
+      {/* Month picker + Export */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-700">Mes:</label>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="border rounded px-3 py-1.5 text-sm"
+          >
+            {months.map((m) => (
+              <option key={m} value={m}>{fmtMonth(m)}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          onClick={() => exportToCsv(rows, selectedMonth)}
+          disabled={rows.length === 0}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:border-[#0170B9] hover:text-[#0170B9] transition-colors disabled:opacity-40"
         >
-          {months.map((m) => (
-            <option key={m} value={m}>{fmtMonth(m)}</option>
-          ))}
-        </select>
+          <Download size={14} />
+          Exportar CSV
+        </button>
       </div>
 
       {/* KPI cards */}
@@ -186,7 +272,7 @@ function TabMesActual({ data }: { data: ControlHorasResponse }) {
         {[
           { label: 'Horas registradas', value: fmt(totalGross), color: 'bg-blue-50 border-blue-200 text-blue-700' },
           { label: 'Horas facturables', value: fmt(totalBillable), color: 'bg-green-50 border-green-200 text-green-700' },
-          { label: 'Horas excedentes', value: fmt(totalSurplus), color: totalSurplus > 0 ? 'bg-red-50 border-red-200 text-red-700' : 'bg-gray-50 border-gray-200 text-gray-500' },
+          { label: 'Costo total', value: fmtCost(totalCost), color: totalCost > 0 ? 'bg-purple-50 border-purple-200 text-purple-700' : 'bg-gray-50 border-gray-200 text-gray-500' },
           { label: 'Horas internas', value: fmt(totalInternal), color: 'bg-gray-50 border-gray-200 text-gray-600' },
         ].map(({ label, value, color }) => (
           <div key={label} className={`rounded-lg border p-3 ${color}`}>
@@ -201,50 +287,106 @@ function TabMesActual({ data }: { data: ControlHorasResponse }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-100 border-b">
-              <th className="px-4 py-2 text-left font-semibold">Proyecto</th>
+              <th className="w-6 px-2 py-2" />
+              <th className="px-4 py-2 text-left font-semibold">Proyecto / Recurso</th>
+              <th className="px-3 py-2 text-center font-semibold text-gray-500 text-xs">Tipo</th>
               <th className="px-4 py-2 text-right font-semibold">Presupuesto</th>
-              <th className="px-4 py-2 text-right font-semibold">Horas Brutas</th>
-              <th className="px-4 py-2 text-right font-semibold text-blue-700">Horas Fact.</th>
-              <th className="px-4 py-2 text-right font-semibold">Excedente</th>
+              <th className="px-4 py-2 text-right font-semibold">H. Brutas</th>
+              <th className="px-4 py-2 text-right font-semibold text-xs">Tarifa</th>
+              <th className="px-4 py-2 text-right font-semibold text-purple-700">Costo</th>
               <th className="px-4 py-2 text-center font-semibold">Estado</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">Sin registros para este mes</td>
+                <td colSpan={8} className="text-center py-8 text-gray-400">Sin registros para este mes</td>
               </tr>
             )}
-            {rows.map((r) => (
-              <tr key={r.projectId} className={`border-b hover:bg-blue-50/30 ${rowBg(r.status)}`}>
-                <td className="px-4 py-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.projectColor }} />
-                    <span className="font-medium">{r.projectName}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-2 text-right text-gray-600">{budgetLabel(r.budgetHours, r.budgetIsEstimated)}</td>
-                <td className="px-4 py-2 text-right">{fmt(r.gross)}</td>
-                <td className={`px-4 py-2 text-right font-semibold ${r.status === 'no-billable' ? 'text-gray-400' : 'text-blue-700'}`}>
-                  {fmt(r.billable)}
-                </td>
-                <td className={`px-4 py-2 text-right ${r.surplus > 0 ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
-                  {r.surplus > 0 ? fmt(r.surplus) : '–'}
-                </td>
-                <td className="px-4 py-2 text-center">{statusBadge(r.status)}</td>
-              </tr>
-            ))}
+            {rows.map((r) => {
+              const isExpanded = expanded.has(r.projectId)
+              const resources = r.monthlyResources[selectedMonth] ?? []
+              const effectiveCost = getEffectiveCost(r)
+              const typeBadge = r.projectType === 't&m'
+                ? <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">T&M</span>
+                : <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">FP</span>
+
+              return [
+                // Project row
+                <tr key={`p-${r.projectId}`} className={`border-b hover:bg-blue-50/30 ${rowBg(r.status)}`}>
+                  <td className="px-2 py-2 text-center">
+                    {resources.length > 0 && (
+                      <button onClick={() => toggleExpand(r.projectId)} className="text-gray-400 hover:text-gray-600">
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.projectColor }} />
+                      <span className="font-semibold">{r.projectName}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-center">{typeBadge}</td>
+                  <td className="px-4 py-2 text-right text-gray-600">{budgetLabel(r.budgetHours, r.budgetIsEstimated)}</td>
+                  <td className="px-4 py-2 text-right font-medium">{fmt(r.gross)}</td>
+                  <td className="px-4 py-2 text-right text-gray-400">—</td>
+                  <td className="px-4 py-2 text-right font-semibold text-purple-700">{fmtCost(effectiveCost)}</td>
+                  <td className="px-4 py-2 text-center">{statusBadge(r.status)}</td>
+                </tr>,
+                // Resource rows (expanded)
+                ...(isExpanded ? resources.map((res) => {
+                  const isBillable = getBillable(r.projectId, res.resourceId, res.billable)
+                  const cost = isBillable ? res.grossHours * res.ratePerHour : 0
+                  return (
+                    <tr key={`res-${r.projectId}-${res.resourceId}`} className="border-b bg-gray-50/70">
+                      <td />
+                      <td className="px-4 py-1.5">
+                        <div className="flex items-center gap-2 pl-5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: res.resourceColor }} />
+                          <span className="text-gray-700">{res.resourceName}</span>
+                          <span className="text-xs text-gray-400 ml-1">({res.profile})</span>
+                          {!isBillable && <span className="text-xs ml-1" title="No facturable">🚫</span>}
+                        </div>
+                      </td>
+                      <td />
+                      <td />
+                      <td className="px-4 py-1.5 text-right text-gray-600">{res.grossHours.toFixed(1)}</td>
+                      <td className="px-4 py-1.5 text-right">
+                        {res.ratePerHour > 0
+                          ? <span className={isBillable ? 'text-gray-700' : 'text-gray-400 line-through'}>${res.ratePerHour}/h</span>
+                          : <span className="text-gray-300">Sin tarifa</span>}
+                      </td>
+                      <td className="px-4 py-1.5 text-right">
+                        {isBillable && cost > 0
+                          ? <span className="text-purple-600">{fmtCost(cost)}</span>
+                          : <span className="text-gray-300">–</span>}
+                      </td>
+                      <td className="px-4 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isBillable}
+                          onChange={() => toggleBillableOverride(r.projectId, res.resourceId, res.billable)}
+                          title={isBillable ? 'Excluir del cálculo' : 'Incluir en el cálculo'}
+                          className="rounded cursor-pointer"
+                        />
+                      </td>
+                    </tr>
+                  )
+                }) : []),
+              ]
+            })}
           </tbody>
           {rows.length > 0 && (
             <tfoot>
               <tr className="bg-gray-100 font-semibold border-t-2 text-sm">
+                <td />
                 <td className="px-4 py-2">TOTAL</td>
                 <td />
+                <td />
                 <td className="px-4 py-2 text-right">{fmt(totalGross)}</td>
-                <td className="px-4 py-2 text-right text-blue-700">{fmt(totalBillable)}</td>
-                <td className={`px-4 py-2 text-right ${totalSurplus > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                  {totalSurplus > 0 ? fmt(totalSurplus) : '–'}
-                </td>
+                <td />
+                <td className="px-4 py-2 text-right text-purple-700">{fmtCost(totalCost)}</td>
                 <td />
               </tr>
             </tfoot>

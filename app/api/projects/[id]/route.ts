@@ -17,6 +17,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       estimatedHours: Number(body.estimatedHours),
       costPerHour: Number(body.costPerHour ?? 0),
       budgetHours: 'budgetHours' in body ? (body.budgetHours != null ? Number(body.budgetHours) : null) : undefined,
+      projectType: body.projectType ?? 'fixed',
       notes: body.notes ?? '',
     },
   })

@@ -16,10 +16,11 @@ model Resource {
   capacityH Int      @default(8)
   createdAt DateTime @default(now())
 
-  assignments Assignment[]
-  holidays    Holiday[]
-  vacations   Vacation[]
-  timeEntries TimeEntry[]
+  assignments   Assignment[]
+  holidays      Holiday[]
+  vacations     Vacation[]
+  timeEntries   TimeEntry[]
+  resourceRates ProjectResourceRate[]
 }
 
 model Project {
@@ -33,11 +34,13 @@ model Project {
   estimatedHours Int
   costPerHour    Float    @default(0)
   budgetHours    Float?
+  projectType    String   @default("fixed")
   notes          String   @default("")
   createdAt      DateTime @default(now())
 
-  assignments Assignment[]
-  timeEntries TimeEntry[]
+  assignments   Assignment[]
+  timeEntries   TimeEntry[]
+  resourceRates ProjectResourceRate[]
 }
 
 model Assignment {
@@ -134,4 +137,18 @@ model TimeEntry {
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([resourceId, projectId, date])
+}
+
+model ProjectResourceRate {
+  id          Int     @id @default(autoincrement())
+  projectId   Int
+  resourceId  Int
+  profile     String  @default("Developer")
+  ratePerHour Float   @default(0)
+  billable    Boolean @default(true)
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, resourceId])
 }

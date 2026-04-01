@@ -18,6 +18,7 @@ export interface Project {
   estimatedHours: number
   costPerHour: number
   budgetHours: number | null
+  projectType: string
   notes: string
   createdAt: string
 }
@@ -134,17 +135,46 @@ export const STATUS_COLORS: Record<string, string> = {
   'No Facturable': '#F3F4F6',
 }
 
+export const RESOURCE_PROFILES = [
+  'Developer', 'Senior Developer', 'Tester', 'DevOps', 'QA', 'PM',
+  'Tech Lead', 'Designer', 'Analyst', 'Other',
+]
+
+export interface ProjectResourceRate {
+  id?: number
+  projectId: number
+  resourceId: number
+  profile: string
+  ratePerHour: number
+  billable: boolean
+  resource?: Pick<Resource, 'id' | 'name' | 'color'>
+}
+
+export interface ResourceBillingBreakdown {
+  resourceId: number
+  resourceName: string
+  resourceColor: string
+  profile: string
+  ratePerHour: number
+  billable: boolean
+  grossHours: number
+  cost: number
+}
+
 export interface ControlHorasProject {
   projectId: number
   projectName: string
   projectColor: string
   projectStatus: string
+  projectType: string
   budgetHours: number | null
-  budgetIsEstimated: boolean  // true when budget derived from estimatedHours (no explicit budgetHours set)
+  budgetIsEstimated: boolean
   monthlyGross: Record<string, number>
   monthlyBillable: Record<string, number>
+  monthlyResources: Record<string, ResourceBillingBreakdown[]>
   totalGross: number
   totalBillable: number
+  totalCost: number
   surplus: number
   status: 'ok' | 'warning' | 'exceeded' | 'unlimited' | 'no-billable'
 }

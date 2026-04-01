@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       estimatedHours: Number(body.estimatedHours),
       costPerHour: Number(body.costPerHour ?? 0),
       budgetHours: body.budgetHours != null ? Number(body.budgetHours) : null,
+      projectType: body.projectType ?? 'fixed',
       notes: body.notes ?? '',
     },
   })
