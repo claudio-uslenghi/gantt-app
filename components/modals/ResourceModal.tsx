@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Resource } from '@/types'
 import { COUNTRIES } from '@/lib/countries'
+import { toast } from '@/lib/toast'
 
 const schema = z.object({
   name: z.string().min(1),
@@ -77,7 +78,7 @@ export default function ResourceModal({ open, onClose, editResource }: Props) {
       const { synced } = await res.json()
       qc.invalidateQueries({ queryKey: ['gantt'] })
       qc.invalidateQueries({ queryKey: ['holidays'] })
-      alert(`${synced} feriados cargados para ${country}`)
+      toast({ title: `${synced} feriados cargados para ${country}`, variant: 'success' })
     }
   }
 

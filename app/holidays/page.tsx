@@ -11,6 +11,7 @@ import VacationModal from '@/components/modals/VacationModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
 import type { Resource, Vacation, CountryHoliday } from '@/types'
 import { FLAG_BY_NAME } from '@/lib/countries'
+import { confirmDialog } from '@/lib/confirm-dialog'
 
 function countryLabel(name: string) {
   const flag = FLAG_BY_NAME[name] ?? '🌍'
@@ -56,7 +57,11 @@ export default function HolidaysPage() {
   })
 
   const deleteCountryHoliday = async (id: number) => {
-    if (!confirm('¿Eliminar este feriado? Se eliminará para todos los recursos del país.')) return
+    const ok = await confirmDialog({
+      title: '¿Eliminar este feriado?',
+      description: 'Se eliminará para todos los recursos del país.',
+    })
+    if (!ok) return
     await fetch(`/api/country-holidays/${id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['country-holidays'] })
     qc.invalidateQueries({ queryKey: ['holidays'] })

@@ -764,3 +764,100 @@ Sin suite automatizada — patrón ya usado en el repo: `npx tsc --noEmit` + `np
 ## Open Questions
 
 - El hallazgo 6 (`SearchableSelect` sin roles ARIA de combobox) queda documentado pero fuera de este spec porque afecta 4 pantallas, no 2 — si se quiere resolver, amerita su propio spec acotado a ese componente.
+
+---
+
+# Spec: Sistema de toasts + confirmaciones accesibles + fix de foco en Mis Horas
+
+## Objective
+
+Tres pedidos relacionados sobre feedback al usuario e interacción:
+
+1. **Reemplazar `alert()` de JavaScript por toasts**, con buenas prácticas de color/duración/accesibilidad (verde=éxito, rojo=error, etc.).
+2. **Bug de foco en Mis Horas**: al tabular entre celdas de la grilla semanal y cargar horas, la 3ra celda pierde el foco al escribir el número (las primeras 2 funcionan bien).
+3. **(Ampliación de alcance, confirmada con el usuario)**: reemplazar los 11 `confirm()` nativos (todos guardan acciones destructivas — borrar fila, proyecto, usuario, etc.) por un modal de confirmación accesible.
+
+**Éxito** = ningún flujo de la app usa `alert()`/`confirm()` nativos; los toasts tienen variante visual clara (éxito/error/advertencia) con buenas prácticas de duración y accesibilidad; las confirmaciones destructivas usan un modal accesible con foco atrapado y texto claro; y en Mis Horas se puede tabular por una fila completa cargando horas en cada celda sin que ninguna pierda el foco.
+
+## Hallazgos clave de la exploración
+
+**Bug de foco (causa raíz confirmada)**: `app/mis-horas/page.tsx` tiene un estado `refreshKey` global (`useState(0)`, línea 80) usado como sufijo del `key` de **cada celda de día de la tabla completa** (`key={`${key}-${day}-${refreshKey}`}`, tanto en la grilla desktop como en el input mobile). `saveCell()` es `async`, y tras el `await fetch` + `await invalidateQueries` incrementa `refreshKey` (línea 230) — ese incremento cambia el `key` de **todas** las celdas de día de **todas** las filas simultáneamente, forzando a React a desmontar y remontar cada `<input>` de la tabla. Si el usuario ya tabuló a una celda distinta mientras el guardado (async) de la celda anterior todavía está en vuelo, ese remount global le arranca el foco a la celda en la que el usuario está escribiendo en ese momento — coincide exactamente con "en la 2 anda bien, en la 3 se pierde": el round-trip de red de la celda 1 suele resolver justo cuando el usuario ya está escribiendo en la celda 3.
+
+**Toasts**: `@radix-ui/react-toast` ya está en `package.json` (`^1.2.15`) pero **no se usa en ningún lado** — no hay `Toaster`, ni `ToastProvider`, ni ningún componente de toast en el repo. Se relevaron 7 `alert()` (validación/error/éxito puntual, repartidos en `admin/hours`, `admin/roles`, `admin/users`, `ResourceModal`) y 2 mensajes de éxito ad-hoc como texto plano (`tmSavedMsg` en Mis Horas, `success` en `/perfil`) — estos 9 sitios son los que se migran a toast (confirmado con el usuario: los ~19 errores de validación inline pegados a campos de formulario quedan como están, porque ahí el usuario necesita ver el error mientras corrige el campo, no en un toast que desaparece). No existen tokens de color semánticos (éxito/error/advertencia) en `globals.css`/`tailwind.config.ts` hoy — cada uso de verde/rojo/ámbar en la app es una clase Tailwind cruda puesta a mano, sin token compartido.
+
+**Confirmaciones**: se relevaron 11 `confirm()` nativos, los 11 para acciones destructivas (borrar fila/mes T&M en Mis Horas, proyecto, recurso, usuario, rol, feriado, tarea, asignación de Gantt). `@radix-ui/react-alert-dialog` (el primitivo correcto para esto — semántica distinta a `react-dialog`, que ya está instalado y se usa en los modales existentes) **no está instalado**, hay que agregarlo.
+
+## Decisiones confirmadas
+
+1. **Toast sobre `@radix-ui/react-toast`** (no se instala `sonner` ni otra librería): ya está en `package.json` sin usar, es accesible por diseño (región `aria-live`, cierre con Escape, swipe-to-dismiss en mobile, pausa al pasar el mouse — todo esto viene gratis del primitivo de Radix), y mantiene consistencia con el resto de la app, que ya usa primitivos Radix sueltos (`Dialog`, `Popover`, `Select`, etc.) en vez de un framework de componentes. Se construye un wrapper delgado, patrón shadcn (`components/ui/toast.tsx` + `components/ui/Toaster.tsx`), sin dependencias de estado nuevas (`lib/toast.ts` expone `toast({ title, description, variant })` con un store simple de módulo + subscriptores, sin zustand ni context extra).
+2. **3 variantes**: `success` (verde), `error` (rojo), `warning` (ámbar) — cubren los 9 sitios migrados. `variant` es obligatorio en el tipo (no hay default), para forzar a cada call site a elegir conscientemente el color en vez de heredar uno por accidente.
+3. **Nuevos tokens de color semánticos** en `globals.css`/`tailwind.config.ts` (`--zircon-success*`, `--zircon-error*`, `--zircon-warning*` → `success`/`error`/`warning` en Tailwind), mismo patrón que los `--zircon-blue*` → `primary` ya existentes. Se reutilizan los mismos tonos que la app ya usa hoy a mano (green-600, red-600/700, amber-800) para que no cambie la paleta percibida, solo se centraliza.
+4. **Duración y comportamiento** (buenas prácticas estándar de toast — Material Design / Nielsen Norman Group): `success`/`warning` se autodescartan a los 5s, `error` a los 7s (un error necesita más tiempo de lectura) — todos con botón de cierre manual (×) y pausa del timer al pasar el mouse (comportamiento nativo de Radix Toast). Posición: esquina inferior derecha (no compite con el sidebar, que está a la izquierda), apilados si hay más de uno activo.
+5. **`confirmDialog()` sobre `@radix-ui/react-alert-dialog`** (dependencia nueva, única de este spec): mismo patrón de store simple que el toast, expone `confirmDialog({ title, description, confirmLabel?, variant? }): Promise<boolean>` — la firma imita a `confirm()` nativo (una función que se espera y devuelve true/false) para que migrar cada call site sea mecánico: `if (!confirm(msg)) return` → `if (!(await confirmDialog({ title, description }))) return`. `variant: 'destructive'` (default, ya que los 11 casos actuales son todos borrados) pinta el botón de confirmar en rojo; Escape/click afuera/Cancelar resuelven `false`.
+6. **Fix del bug de foco**: se elimina el estado `refreshKey` (innecesario) y el `key` de cada celda pasa a depender **solo de su propio valor guardado** (`key={`${key}-${day}-${row[day] ?? 0}`}` en vez de `${refreshKey}`). Así el remount de una celda ocurre únicamente cuando **esa** celda puntual recibe un valor nuevo del servidor (lo cual ya pasa después de su propio blur, nunca mientras está enfocada) — nunca por el guardado de una celda distinta. Mismo fix en la vista mobile de un día a la vez (línea 452), que tiene el mismo patrón.
+7. **No se toca** ningún endpoint, la lógica de negocio de ninguna pantalla, ni los ~19 errores de validación inline de formularios (quedan con su tratamiento actual).
+
+## Tech Stack
+
+Una dependencia nueva: `@radix-ui/react-alert-dialog` (mismo publisher que los Radix ya instalados). `@radix-ui/react-toast` ya estaba instalado. Sin otras librerías nuevas.
+
+## Project Structure
+
+```
+lib/toast.ts                        -> NUEVO: store de toasts + función toast({ title, description, variant })
+components/ui/toast.tsx             -> NUEVO: primitivos Radix Toast (Provider/Viewport/Root/Title/Description/Close) con estilos por variante
+components/ui/Toaster.tsx           -> NUEVO: renderiza los toasts activos del store
+lib/confirm-dialog.ts               -> NUEVO: store + función confirmDialog({ title, description, confirmLabel?, variant? }): Promise<boolean>
+components/ui/ConfirmDialog.tsx     -> NUEVO: AlertDialog de Radix montado una vez, controlado por el store
+app/layout.tsx                      -> monta <Toaster /> y <ConfirmDialog /> una sola vez
+app/globals.css                     -> +tokens --zircon-success/error/warning
+tailwind.config.ts                  -> +colors success/error/warning
+package.json                        -> +@radix-ui/react-alert-dialog
+
+-- alert() -> toast() (7 sitios):
+app/admin/hours/page.tsx            (3)
+app/admin/roles/page.tsx            (2)
+app/admin/users/page.tsx            (1)
+components/modals/ResourceModal.tsx (1)
+
+-- mensaje ad-hoc -> toast() (2 sitios, se elimina el estado local):
+app/mis-horas/page.tsx              (tmSavedMsg -> toast(); además fix del bug de foco en este mismo archivo)
+app/perfil/page.tsx                 (success -> toast())
+
+-- confirm() -> confirmDialog() (11 sitios):
+app/admin/hours/page.tsx (2)   app/admin/roles/page.tsx (1)   app/admin/users/page.tsx (1)
+app/holidays/page.tsx (1)      app/mis-horas/page.tsx (2)     app/projects/page.tsx (1)
+app/resources/page.tsx (1)     components/gantt/GanttRow.tsx (1)
+components/modals/ProjectModal.tsx (1)
+```
+
+## Code Style
+
+`lib/toast.ts` y `lib/confirm-dialog.ts` siguen el mismo estilo minimalista (store de módulo + array de subscriptores, sin librería de estado nueva) — igual de livianos que los componentes `StatCard`/`EmptyState`/`Skeleton` ya existentes en `components/ui/`. Los call sites migrados cambian lo mínimo indispensable: `alert(msg)` → `toast({ title: msg, variant: '...' })`, `if (!confirm(msg)) return` → `if (!(await confirmDialog({ title: '...', description: msg }))) return` (la función contenedora ya es `async` en la mayoría de los 11 casos, al ser handlers que hacen `fetch` después).
+
+## Testing Strategy
+
+Sin suite automatizada — patrón ya usado en el repo: `npx tsc --noEmit` + `npm run build` + QA manual en navegador. Para este spec en particular:
+- Disparar al menos un toast de cada variante (éxito/error/advertencia) y confirmar color, ícono, auto-descarte en el tiempo esperado, y que el botón de cierre manual funciona.
+- Confirmar al menos 2 flujos de confirmación destructiva (ej. borrar fila en Mis Horas, borrar un proyecto): el modal atrapa el foco, Escape/Cancelar no ejecutan la acción, Confirmar sí la ejecuta.
+- **Foco en Mis Horas**: tabular por una fila completa (7 celdas) cargando un valor distinto en cada una, sin usar el mouse — confirmar que el foco nunca salta a otra celda ni al body mientras el guardado anterior está en vuelo. Repetir en la vista mobile de un día.
+- `git diff --stat` confirma que los únicos archivos tocados son los listados arriba (ningún cambio en Gantt, Control de Horas, ni en los ~19 sitios de error inline de formularios que quedan fuera de alcance).
+
+## Boundaries
+
+- **Always**: usar los tokens de color nuevos (`success`/`error`/`warning`) en vez de clases Tailwind crudas en los sitios migrados; mantener `variant` obligatorio en `toast()` (sin default).
+- **Ask first**: extender la migración a los ~19 errores de validación inline de formularios (fuera de alcance, confirmado con el usuario); cualquier cambio de posición/duración de los toasts distinto a lo acordado acá.
+- **Never**: tocar la lógica de negocio de los endpoints detrás de cada `alert()`/`confirm()` migrado — este spec es puramente de presentación/interacción; dejar `refreshKey` o un patrón equivalente reintroducido en Mis Horas.
+
+## Success Criteria
+
+1. Cero llamadas a `alert()` o `confirm()` nativos en todo el repo (`grep -rn "alert(\|confirm(" app components` solo encuentra los wrappers nuevos, si acaso).
+2. Los 9 sitios de alert()/mensaje ad-hoc muestran un toast con la variante de color correcta (éxito=verde, error=rojo, advertencia=ámbar).
+3. Los 11 sitios de `confirm()` usan el modal accesible; Cancelar/Escape no ejecutan la acción destructiva.
+4. En Mis Horas, tabular por una fila completa cargando horas en cada celda no le hace perder el foco a ninguna celda (desktop y mobile).
+5. `git diff --stat` confirma que los ~19 errores de validación inline de formularios no fueron tocados.
+6. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+
+## Open Questions
+
+Ninguna — alcance confirmado con el usuario antes de escribir este spec.

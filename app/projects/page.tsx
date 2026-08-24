@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { Plus, Pencil, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react'
 import ProjectModal from '@/components/modals/ProjectModal'
 import { formatDate } from '@/lib/date-utils'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import type { Project } from '@/types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -53,7 +54,11 @@ export default function ProjectsPage() {
   })
 
   const deleteProject = async (id: number) => {
-    if (!confirm('¿Eliminar este proyecto y todas sus asignaciones?')) return
+    const ok = await confirmDialog({
+      title: '¿Eliminar este proyecto?',
+      description: 'Se eliminarán también todas sus asignaciones. Esta acción no se puede deshacer.',
+    })
+    if (!ok) return
     await fetch(`/api/projects/${id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['projects'] })
     qc.invalidateQueries({ queryKey: ['gantt'] })

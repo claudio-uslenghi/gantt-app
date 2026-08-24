@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { Pencil, Trash2, Plus, UserCheck, UserX, Eye, EyeOff } from 'lucide-react'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm-dialog'
 
 interface Role {
   id: number
@@ -222,12 +224,13 @@ export default function UsersPage() {
 
   const currentUserId = (session?.user as { id?: string })?.id
 
-  function handleDelete(user: UserItem) {
+  async function handleDelete(user: UserItem) {
     if (String(user.id) === currentUserId) {
-      alert('No podés eliminarte a vos mismo')
+      toast({ title: 'No podés eliminarte a vos mismo', variant: 'warning' })
       return
     }
-    if (confirm(`¿Eliminar usuario "${user.name}"?`)) {
+    const ok = await confirmDialog({ title: `¿Eliminar usuario "${user.name}"?`, description: 'Esta acción no se puede deshacer.' })
+    if (ok) {
       deleteMutation.mutate(user.id)
     }
   }

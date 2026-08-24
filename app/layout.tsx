@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans } from 'next/font/google'
 import './globals.css'
 import Providers from '@/components/layout/Providers'
 import AuthLayout from '@/components/layout/AuthLayout'
+import Toaster from '@/components/ui/Toaster'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 
 // Self-hosted via next/font — no external font request, zero layout shift.
 // Applied once here per Next.js convention rather than per-page.
@@ -26,6 +28,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased bg-gray-50 text-gray-900 font-sans">
         <Providers>
           <AuthLayout>{children}</AuthLayout>
+          <Toaster />
+          <ConfirmDialog />
         </Providers>
       </body>
     </html>

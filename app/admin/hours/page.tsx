@@ -13,6 +13,8 @@ import {
   ChevronDown, Plus, ArrowUp, ArrowDown, ArrowUpDown,
 } from 'lucide-react'
 import SearchableSelect from '@/components/ui/SearchableSelect'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import type {
   ParsedTimeEntry, ImportTimeEntriesResult,
   TimeEntryByResource, TimeEntryByProject, TimeEntryByMonth,
@@ -653,7 +655,11 @@ function DeleteByMonth() {
   const handleDelete = async () => {
     if (!month) return
     const label = month
-    if (!confirm(`¿Eliminar TODAS las horas del mes ${label}? Esta acción no se puede deshacer.`)) return
+    const ok = await confirmDialog({
+      title: `¿Eliminar todas las horas del mes ${label}?`,
+      description: 'Esta acción no se puede deshacer.',
+    })
+    if (!ok) return
     setDeleting(true); setError(''); setResult(null)
     try {
       const res = await fetch(`/api/time-entries?month=${label}`, { method: 'DELETE' })
@@ -855,14 +861,15 @@ function TabTabla() {
       qc.invalidateQueries({ queryKey: ['time-entries'] })
       setEditingId(null)
     } catch {
-      alert('Error al guardar el registro')
+      toast({ title: 'Error al guardar el registro', variant: 'error' })
     } finally {
       setSaving(false)
     }
   }
 
   const deleteEntry = async (id: number) => {
-    if (!confirm('¿Eliminar este registro de horas?')) return
+    const ok = await confirmDialog({ title: '¿Eliminar este registro de horas?', description: 'Esta acción no se puede deshacer.' })
+    if (!ok) return
     setDeletingId(id)
     try {
       await fetch(`/api/time-entries/${id}`, { method: 'DELETE' })
@@ -874,7 +881,7 @@ function TabTabla() {
 
   const saveNew = async () => {
     if (!newForm.resourceId || !newForm.projectId || !newForm.date || !newForm.hours) {
-      alert('Completar todos los campos')
+      toast({ title: 'Completar todos los campos', variant: 'warning' })
       return
     }
     setAddingSaving(true)
@@ -897,7 +904,7 @@ function TabTabla() {
       setIsAdding(false)
       setNewForm({ resourceId: '', projectId: '', date: '', hours: '' })
     } catch (err) {
-      alert(`Error: ${(err as Error).message}`)
+      toast({ title: 'Error', description: (err as Error).message, variant: 'error' })
     } finally {
       setAddingSaving(false)
     }

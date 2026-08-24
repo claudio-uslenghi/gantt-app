@@ -7,6 +7,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import GanttCell from './GanttCell'
 import { STICKY_OFFSETS } from './GanttHeader'
 import { getCellData } from '@/lib/gantt-utils'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import { STATUS_COLORS } from '@/types'
 import type { Assignment, Project, Resource, Holiday, Vacation } from '@/types'
 
@@ -159,9 +160,13 @@ function GanttRowInner({
                 <Pencil size={11} />
               </button>
               <button
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation()
-                  if (confirm(`¿Eliminar la asignacion de ${resource.name} en ${project.name}?`)) {
+                  const ok = await confirmDialog({
+                    title: `¿Eliminar la asignación de ${resource.name} en ${project.name}?`,
+                    description: 'Esta acción no se puede deshacer.',
+                  })
+                  if (ok) {
                     onDelete(assignment.id)
                   }
                 }}

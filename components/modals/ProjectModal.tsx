@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { PROJECT_PALETTE, RESOURCE_PROFILES } from '@/types'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import type { Project, Resource, ProjectResourceRate, Task } from '@/types'
 
 const schema = z.object({
@@ -89,7 +90,11 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
   }
 
   async function deleteTask(task: Task) {
-    if (!confirm(`¿Eliminar la tarea "${task.name}"? Las horas ya cargadas contra ella no se pierden.`)) return
+    const ok = await confirmDialog({
+      title: `¿Eliminar la tarea "${task.name}"?`,
+      description: 'Las horas ya cargadas contra ella no se pierden.',
+    })
+    if (!ok) return
     await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['tasks', editProject?.id] })
   }
