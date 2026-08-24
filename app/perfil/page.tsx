@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { toast } from '@/lib/toast'
 
 export default function PerfilPage() {
   const { data: session } = useSession()
@@ -9,13 +10,11 @@ export default function PerfilPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    setSuccess('')
 
     if (newPassword !== confirmPassword) {
       setError('Las contraseñas nuevas no coinciden')
@@ -35,7 +34,7 @@ export default function PerfilPage() {
       })
       const body = await res.json()
       if (res.ok) {
-        setSuccess('Contraseña actualizada correctamente.')
+        toast({ title: 'Contraseña actualizada correctamente.', variant: 'success' })
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
@@ -88,7 +87,6 @@ export default function PerfilPage() {
             />
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
-          {success && <p className="text-green-600 text-sm">{success}</p>}
           <button
             type="submit"
             disabled={submitting}

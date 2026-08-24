@@ -17,6 +17,12 @@ const config: Config = {
         primary: "var(--zircon-blue)",
         "primary-dark": "var(--zircon-blue-dark)",
         "primary-light": "var(--zircon-blue-light)",
+        success: "var(--zircon-success)",
+        "success-light": "var(--zircon-success-light)",
+        error: "var(--zircon-error)",
+        "error-light": "var(--zircon-error-light)",
+        warning: "var(--zircon-warning)",
+        "warning-light": "var(--zircon-warning-light)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],

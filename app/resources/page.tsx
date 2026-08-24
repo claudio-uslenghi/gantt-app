@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import ResourceModal from '@/components/modals/ResourceModal'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import type { Resource } from '@/types'
 
 export default function ResourcesPage() {
@@ -17,7 +18,11 @@ export default function ResourcesPage() {
   })
 
   const deleteResource = async (id: number) => {
-    if (!confirm('¿Eliminar este recurso y todas sus asignaciones?')) return
+    const ok = await confirmDialog({
+      title: '¿Eliminar este recurso?',
+      description: 'Se eliminarán también todas sus asignaciones. Esta acción no se puede deshacer.',
+    })
+    if (!ok) return
     await fetch(`/api/resources/${id}`, { method: 'DELETE' })
     qc.invalidateQueries({ queryKey: ['resources'] })
     qc.invalidateQueries({ queryKey: ['gantt'] })

@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Plus, Lock } from 'lucide-react'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm-dialog'
 
 interface RoleItem {
   id: number
@@ -32,7 +34,7 @@ export default function RolesPage() {
       return data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-roles'] }),
-    onError: (err: Error) => alert(err.message),
+    onError: (err: Error) => toast({ title: err.message, variant: 'error' }),
   })
 
   async function handleAdd(e: React.FormEvent) {
@@ -122,12 +124,13 @@ export default function RolesPage() {
                   <td className="px-4 py-3 text-center">
                     {!role.isDefault && (
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (role.userCount > 0) {
-                            alert('No se puede eliminar un rol que tiene usuarios asignados')
+                            toast({ title: 'No se puede eliminar un rol que tiene usuarios asignados', variant: 'warning' })
                             return
                           }
-                          if (confirm(`¿Eliminar el rol "${role.name}"?`)) {
+                          const ok = await confirmDialog({ title: `¿Eliminar el rol "${role.name}"?`, description: 'Esta acción no se puede deshacer.' })
+                          if (ok) {
                             deleteMutation.mutate(role.id)
                           }
                         }}

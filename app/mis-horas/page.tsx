@@ -7,6 +7,8 @@ import { es } from 'date-fns/locale'
 import { Plus, Trash2, Clock, FolderKanban, ListChecks, CalendarClock } from 'lucide-react'
 import { useIsMobile } from '@/lib/use-is-mobile'
 import { PIVOT_COLORS } from '@/lib/pivot-colors'
+import { toast } from '@/lib/toast'
+import { confirmDialog } from '@/lib/confirm-dialog'
 import SearchableSelect from '@/components/ui/SearchableSelect'
 import StatCard from '@/components/ui/StatCard'
 import EmptyState from '@/components/ui/EmptyState'
@@ -77,14 +79,12 @@ export default function MisHorasPage() {
   const [pickerTaskId, setPickerTaskId] = useState('')
   const [newTaskName, setNewTaskName] = useState('')
   const [creatingTask, setCreatingTask] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
 
   const [tmProjectId, setTmProjectId] = useState('')
   const [tmYm, setTmYm] = useState(format(today, 'yyyy-MM'))
   const [tmDefaultHours, setTmDefaultHours] = useState(8)
   const [tmDayValues, setTmDayValues] = useState<Record<number, number>>({})
   const [tmSaving, setTmSaving] = useState(false)
-  const [tmSavedMsg, setTmSavedMsg] = useState('')
   const [tmDeleting, setTmDeleting] = useState(false)
 
   // Mobile Detallado view shows one day at a time — defaults to today when
@@ -212,7 +212,11 @@ export default function MisHorasPage() {
     const row = grid.get(key) ?? {}
     const hasHours = Object.values(row).some((h) => h > 0)
     if (hasHours) {
-      if (!confirm(`¿Eliminar "${rowLabel(key)}"? Se van a borrar las horas cargadas esta semana para esta fila.`)) return
+      const ok = await confirmDialog({
+        title: `¿Eliminar "${rowLabel(key)}"?`,
+        description: 'Se van a borrar las horas cargadas esta semana para esta fila.',
+      })
+      if (!ok) return
       const idsToDelete = entries.filter((e) => e.projectId === projectId && e.taskId === taskId).map((e) => e.id)
       await Promise.all(idsToDelete.map((id) => fetch(`/api/me/time-entries?id=${id}`, { method: 'DELETE' })))
       await qc.invalidateQueries({ queryKey: ['me-time-entries', weekStart] })
@@ -227,7 +231,6 @@ export default function MisHorasPage() {
       body: JSON.stringify({ projectId, taskId, date: `${day}T12:00:00.000Z`, hours }),
     })
     await qc.invalidateQueries({ queryKey: ['me-time-entries', weekStart] })
-    setRefreshKey((k) => k + 1)
   }
 
   // ─── T&M bulk mode ─────────────────────────────────────────────────────────
@@ -279,7 +282,6 @@ export default function MisHorasPage() {
 
   async function saveTmMonth() {
     setTmSaving(true)
-    setTmSavedMsg('')
     try {
       const res = await fetch('/api/me/time-entries', {
         method: 'POST',
@@ -293,7 +295,11 @@ export default function MisHorasPage() {
         }),
       })
       const json = await res.json()
-      setTmSavedMsg(res.ok ? `Guardado: ${json.saved} días` : (json.error ?? 'Error al guardar'))
+      if (res.ok) {
+        toast({ title: `Guardado: ${json.saved} días`, variant: 'success' })
+      } else {
+        toast({ title: 'Error al guardar', description: json.error, variant: 'error' })
+      }
       qc.invalidateQueries({ queryKey: ['me-time-entries-tm', tmProjectId, tmYm] })
     } finally {
       setTmSaving(false)
@@ -303,13 +309,20 @@ export default function MisHorasPage() {
   async function deleteTmMonth() {
     const projectName = projectById.get(Number(tmProjectId))?.name ?? 'este proyecto'
     const monthLabel = format(new Date(tmYear, tmMonth - 1, 1), 'MMMM yyyy', { locale: es })
-    if (!confirm(`¿Borrar TODAS las horas de "${projectName}" cargadas en ${monthLabel}? Esta acción no se puede deshacer.`)) return
+    const ok = await confirmDialog({
+      title: `¿Borrar todas las horas de "${projectName}" en ${monthLabel}?`,
+      description: 'Esta acción no se puede deshacer.',
+    })
+    if (!ok) return
     setTmDeleting(true)
-    setTmSavedMsg('')
     try {
       const res = await fetch(`/api/me/time-entries?projectId=${tmProjectId}&month=${tmYm}`, { method: 'DELETE' })
       const json = await res.json()
-      setTmSavedMsg(res.ok ? `Borradas ${json.deleted} entradas de ${monthLabel}` : (json.error ?? 'Error al borrar'))
+      if (res.ok) {
+        toast({ title: `Borradas ${json.deleted} entradas de ${monthLabel}`, variant: 'success' })
+      } else {
+        toast({ title: 'Error al borrar', description: json.error, variant: 'error' })
+      }
       qc.invalidateQueries({ queryKey: ['me-time-entries-tm', tmProjectId, tmYm] })
     } finally {
       setTmDeleting(false)
@@ -449,7 +462,7 @@ export default function MisHorasPage() {
                           if (val === (row[selectedDay] ?? 0)) return
                           saveCell(projectId, taskId, selectedDay, val)
                         }}
-                        key={`${key}-${selectedDay}-${refreshKey}`}
+                        key={`${key}-${selectedDay}-${row[selectedDay] ?? 0}`}
                         style={{ fontSize: 16 }}
                         className="w-20 border border-gray-300 rounded px-2 py-2 text-center tabular-nums focus:bg-blue-50 focus:outline-none focus:border-primary"
                       />
@@ -603,7 +616,7 @@ export default function MisHorasPage() {
                           </div>
                         </td>
                         {days.map((day) => (
-                          <td key={`${key}-${day}-${refreshKey}`} style={{
+                          <td key={`${key}-${day}-${row[day] ?? 0}`} style={{
                             backgroundColor: isToday(day) ? '#fffbeb' : isWeekendDay(day) ? '#F3F4F6' : 'white',
                             width: CELL_W, minWidth: CELL_W,
                             borderRight: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb',
@@ -850,7 +863,6 @@ export default function MisHorasPage() {
                 >
                   {tmDeleting ? 'Borrando...' : 'Borrar mes'}
                 </button>
-                {tmSavedMsg && <span className="text-sm text-gray-500">{tmSavedMsg}</span>}
               </div>
             </>
           )}
