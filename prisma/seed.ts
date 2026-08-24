@@ -2,6 +2,8 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+// Fictional demo data for local development only — no real staff, client,
+// or rate information. See SPEC.md for why this matters in a public repo.
 async function main() {
   console.log('🌱 Seeding database...')
 
@@ -13,20 +15,20 @@ async function main() {
   await prisma.resource.deleteMany()
 
   // ── RESOURCES ──────────────────────────────────────────────
-  const pablo = await prisma.resource.create({
-    data: { name: 'Pablo', country: 'Argentina', color: '#2E75B6', capacityH: 8 },
+  const ana = await prisma.resource.create({
+    data: { name: 'Ana Demo', country: 'Argentina', color: '#2E75B6', capacityH: 8 },
   })
-  const betsabe = await prisma.resource.create({
-    data: { name: 'Betsabé', country: 'Argentina', color: '#548235', capacityH: 8 },
+  const bruno = await prisma.resource.create({
+    data: { name: 'Bruno Demo', country: 'Argentina', color: '#548235', capacityH: 8 },
   })
-  const will = await prisma.resource.create({
-    data: { name: 'Will', country: 'Uruguay', color: '#C55A11', capacityH: 8 },
+  const carla = await prisma.resource.create({
+    data: { name: 'Carla Demo', country: 'Uruguay', color: '#C55A11', capacityH: 8 },
   })
-  const marcelo = await prisma.resource.create({
-    data: { name: 'Marcelo', country: 'Chile', color: '#7030A0', capacityH: 8 },
+  const diego = await prisma.resource.create({
+    data: { name: 'Diego Demo', country: 'Chile', color: '#7030A0', capacityH: 8 },
   })
-  const claudio = await prisma.resource.create({
-    data: { name: 'Claudio', country: 'Argentina', color: '#0070C0', capacityH: 8 },
+  const elena = await prisma.resource.create({
+    data: { name: 'Elena Demo', country: 'Argentina', color: '#0070C0', capacityH: 8 },
   })
 
   console.log('✅ Resources created')
@@ -42,27 +44,27 @@ async function main() {
   ]
 
   for (const h of argHolidays) {
-    for (const resourceId of [pablo.id, betsabe.id, claudio.id]) {
+    for (const resourceId of [ana.id, bruno.id, elena.id]) {
       await prisma.holiday.create({ data: { resourceId, date: h.date, name: h.name } })
     }
   }
 
-  const willHolidays = [
+  const carlaHolidays = [
     { date: new Date('2026-04-02T12:00:00Z'), name: 'Semana Santa' },
     { date: new Date('2026-04-03T12:00:00Z'), name: 'Semana Santa' },
     { date: new Date('2026-05-01T12:00:00Z'), name: 'Día de los Trabajadores' },
   ]
-  for (const h of willHolidays) {
-    await prisma.holiday.create({ data: { resourceId: will.id, date: h.date, name: h.name } })
+  for (const h of carlaHolidays) {
+    await prisma.holiday.create({ data: { resourceId: carla.id, date: h.date, name: h.name } })
   }
 
-  const marceloHolidays = [
+  const diegoHolidays = [
     { date: new Date('2026-04-03T12:00:00Z'), name: 'Viernes Santo' },
     { date: new Date('2026-05-01T12:00:00Z'), name: 'Día del Trabajador' },
     { date: new Date('2026-05-21T12:00:00Z'), name: 'Día de las Glorias Navales' },
   ]
-  for (const h of marceloHolidays) {
-    await prisma.holiday.create({ data: { resourceId: marcelo.id, date: h.date, name: h.name } })
+  for (const h of diegoHolidays) {
+    await prisma.holiday.create({ data: { resourceId: diego.id, date: h.date, name: h.name } })
   }
 
   console.log('✅ Holidays created')
@@ -70,7 +72,7 @@ async function main() {
   // ── VACATIONS ──────────────────────────────────────────────
   await prisma.vacation.create({
     data: {
-      resourceId: pablo.id,
+      resourceId: ana.id,
       startDate: new Date('2026-04-06T12:00:00Z'),
       endDate: new Date('2026-04-30T12:00:00Z'),
       notes: '19 días hábiles',
@@ -78,7 +80,7 @@ async function main() {
   })
   await prisma.vacation.create({
     data: {
-      resourceId: betsabe.id,
+      resourceId: bruno.id,
       startDate: new Date('2026-03-30T12:00:00Z'),
       endDate: new Date('2026-04-03T12:00:00Z'),
       notes: '5 días hábiles',
@@ -86,7 +88,7 @@ async function main() {
   })
   await prisma.vacation.create({
     data: {
-      resourceId: will.id,
+      resourceId: carla.id,
       startDate: new Date('2026-04-08T12:00:00Z'),
       endDate: new Date('2026-04-21T12:00:00Z'),
       notes: '10 días hábiles',
@@ -96,100 +98,100 @@ async function main() {
   console.log('✅ Vacations created')
 
   // ── PROJECTS ───────────────────────────────────────────────
-  const ameba = await prisma.project.create({
+  const alpha = await prisma.project.create({
     data: {
-      name: 'Ameba',
+      name: 'Proyecto Alpha',
       color: '#1F7391',
       status: 'En ejecución',
       priority: 'Alta',
       startDate: new Date('2026-03-16T12:00:00Z'),
       endDate: new Date('2026-03-27T12:00:00Z'),
       estimatedHours: 18,
-      costPerHour: 75,
+      costPerHour: 50,
     },
   })
 
-  const breinchild = await prisma.project.create({
+  const beta = await prisma.project.create({
     data: {
-      name: 'Breinchild',
+      name: 'Proyecto Beta',
       color: '#7D3C98',
       status: 'En ejecución',
       priority: 'Alta',
       startDate: new Date('2026-03-16T12:00:00Z'),
       endDate: new Date('2026-03-27T12:00:00Z'),
       estimatedHours: 18,
-      costPerHour: 75,
+      costPerHour: 50,
     },
   })
 
-  const mob = await prisma.project.create({
+  const gamma = await prisma.project.create({
     data: {
-      name: 'MOB',
+      name: 'Proyecto Gamma',
       color: '#2E75B6',
       status: 'En ejecución',
       priority: 'Alta',
       startDate: new Date('2026-03-23T12:00:00Z'),
       endDate: new Date('2026-05-15T12:00:00Z'),
       estimatedHours: 39,
-      costPerHour: 75,
+      costPerHour: 50,
     },
   })
 
-  const idealProtein = await prisma.project.create({
+  const delta = await prisma.project.create({
     data: {
-      name: 'Ideal Protein',
+      name: 'Proyecto Delta',
       color: '#0070C0',
       status: 'En ejecución',
       priority: 'Alta',
       startDate: new Date('2026-03-02T12:00:00Z'),
       endDate: new Date('2026-04-30T12:00:00Z'),
       estimatedHours: 40,
-      costPerHour: 60,
+      costPerHour: 50,
     },
   })
 
-  const starCenter = await prisma.project.create({
+  const epsilon = await prisma.project.create({
     data: {
-      name: 'StarCenter',
+      name: 'Proyecto Epsilon',
       color: '#548235',
       status: 'En ejecución',
       priority: 'Media',
       startDate: new Date('2026-03-04T12:00:00Z'),
       endDate: new Date('2026-06-23T12:00:00Z'),
       estimatedHours: 40,
-      costPerHour: 70,
+      costPerHour: 50,
     },
   })
 
-  const smartWay = await prisma.project.create({
+  const zeta = await prisma.project.create({
     data: {
-      name: 'SmartWay',
+      name: 'Proyecto Zeta',
       color: '#C55A11',
       status: 'Próximo',
       priority: 'Media',
       startDate: new Date('2026-03-23T12:00:00Z'),
       endDate: new Date('2026-06-23T12:00:00Z'),
       estimatedHours: 100,
-      costPerHour: 65,
+      costPerHour: 50,
     },
   })
 
-  const m3c = await prisma.project.create({
+  const eta = await prisma.project.create({
     data: {
-      name: 'M3C',
+      name: 'Proyecto Eta',
       color: '#7030A0',
       status: 'En planificación',
       priority: 'Baja',
       startDate: new Date('2026-03-23T12:00:00Z'),
       endDate: new Date('2026-06-23T12:00:00Z'),
       estimatedHours: 90,
-      costPerHour: 80,
+      costPerHour: 50,
     },
   })
 
-  const presales = await prisma.project.create({
+  const preventa = await prisma.project.create({
     data: {
-      name: 'Presales',
+      name: 'Preventa',
       color: '#833C00',
       status: 'Continuo',
       priority: 'Alta',
@@ -205,30 +207,30 @@ async function main() {
   // ── ASSIGNMENTS ────────────────────────────────────────────
   await prisma.assignment.createMany({
     data: [
-      // Ameba
+      // Alpha
       {
-        projectId: ameba.id,
-        resourceId: pablo.id,
+        projectId: alpha.id,
+        resourceId: ana.id,
         moduleName: 'Desarrollo',
         percentage: 25,
         startDate: new Date('2026-03-16T12:00:00Z'),
         endDate: new Date('2026-03-27T12:00:00Z'),
         estimatedHours: 18,
       },
-      // Breinchild
+      // Beta
       {
-        projectId: breinchild.id,
-        resourceId: pablo.id,
+        projectId: beta.id,
+        resourceId: ana.id,
         moduleName: 'Desarrollo',
         percentage: 25,
         startDate: new Date('2026-03-16T12:00:00Z'),
         endDate: new Date('2026-03-27T12:00:00Z'),
         estimatedHours: 18,
       },
-      // MOB
+      // Gamma
       {
-        projectId: mob.id,
-        resourceId: pablo.id,
+        projectId: gamma.id,
+        resourceId: ana.id,
         moduleName: 'Backend / API + QA',
         percentage: 75,
         startDate: new Date('2026-03-23T12:00:00Z'),
@@ -236,28 +238,28 @@ async function main() {
         estimatedHours: 30,
       },
       {
-        projectId: mob.id,
-        resourceId: claudio.id,
+        projectId: gamma.id,
+        resourceId: elena.id,
         moduleName: 'PM',
         percentage: 20,
         startDate: new Date('2026-03-23T12:00:00Z'),
         endDate: new Date('2026-05-15T12:00:00Z'),
         estimatedHours: 9,
       },
-      // Ideal Protein
+      // Delta
       {
-        projectId: idealProtein.id,
-        resourceId: will.id,
+        projectId: delta.id,
+        resourceId: carla.id,
         moduleName: 'Diseño & Frontend (dem)',
         percentage: 25,
         startDate: new Date('2026-03-02T12:00:00Z'),
         endDate: new Date('2026-04-30T12:00:00Z'),
         estimatedHours: 40,
       },
-      // StarCenter
+      // Epsilon
       {
-        projectId: starCenter.id,
-        resourceId: betsabe.id,
+        projectId: epsilon.id,
+        resourceId: bruno.id,
         moduleName: 'Análisis & Desarrollo',
         percentage: 50,
         startDate: new Date('2026-03-04T12:00:00Z'),
@@ -265,18 +267,18 @@ async function main() {
         estimatedHours: 35,
       },
       {
-        projectId: starCenter.id,
-        resourceId: claudio.id,
+        projectId: epsilon.id,
+        resourceId: elena.id,
         moduleName: 'PM',
         percentage: 15,
         startDate: new Date('2026-03-04T12:00:00Z'),
         endDate: new Date('2026-06-23T12:00:00Z'),
         estimatedHours: 5,
       },
-      // SmartWay
+      // Zeta
       {
-        projectId: smartWay.id,
-        resourceId: will.id,
+        projectId: zeta.id,
+        resourceId: carla.id,
         moduleName: 'Fase 1 – Backend',
         percentage: 50,
         startDate: new Date('2026-03-23T12:00:00Z'),
@@ -284,8 +286,8 @@ async function main() {
         estimatedHours: 50,
       },
       {
-        projectId: smartWay.id,
-        resourceId: will.id,
+        projectId: zeta.id,
+        resourceId: carla.id,
         moduleName: 'Fase 2 – Integración',
         percentage: 50,
         startDate: new Date('2026-05-11T12:00:00Z'),
@@ -293,18 +295,18 @@ async function main() {
         estimatedHours: 50,
       },
       {
-        projectId: smartWay.id,
-        resourceId: claudio.id,
+        projectId: zeta.id,
+        resourceId: elena.id,
         moduleName: 'PM',
         percentage: 15,
         startDate: new Date('2026-03-23T12:00:00Z'),
         endDate: new Date('2026-06-23T12:00:00Z'),
         estimatedHours: 10,
       },
-      // M3C
+      // Eta
       {
-        projectId: m3c.id,
-        resourceId: will.id,
+        projectId: eta.id,
+        resourceId: carla.id,
         moduleName: 'Análisis & Arquitectura',
         percentage: 50,
         startDate: new Date('2026-03-23T12:00:00Z'),
@@ -312,18 +314,18 @@ async function main() {
         estimatedHours: 80,
       },
       {
-        projectId: m3c.id,
-        resourceId: claudio.id,
+        projectId: eta.id,
+        resourceId: elena.id,
         moduleName: 'PM / Kick-off',
         percentage: 10,
         startDate: new Date('2026-03-23T12:00:00Z'),
         endDate: new Date('2026-06-23T12:00:00Z'),
         estimatedHours: 10,
       },
-      // Presales
+      // Preventa
       {
-        projectId: presales.id,
-        resourceId: betsabe.id,
+        projectId: preventa.id,
+        resourceId: bruno.id,
         moduleName: 'Actividades de Preventa',
         percentage: 50,
         startDate: new Date('2026-03-02T12:00:00Z'),
@@ -331,8 +333,8 @@ async function main() {
         estimatedHours: 150,
       },
       {
-        projectId: presales.id,
-        resourceId: will.id,
+        projectId: preventa.id,
+        resourceId: carla.id,
         moduleName: 'Actividades de Preventa',
         percentage: 50,
         startDate: new Date('2026-03-02T12:00:00Z'),
@@ -340,8 +342,8 @@ async function main() {
         estimatedHours: 150,
       },
       {
-        projectId: presales.id,
-        resourceId: marcelo.id,
+        projectId: preventa.id,
+        resourceId: diego.id,
         moduleName: 'Actividades de Preventa',
         percentage: 50,
         startDate: new Date('2026-03-02T12:00:00Z'),
