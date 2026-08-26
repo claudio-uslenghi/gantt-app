@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client'
 import * as bcrypt from 'bcryptjs'
 import * as dotenv from 'dotenv'
+import { randomBytes } from 'crypto'
 
 dotenv.config()
 
@@ -78,12 +79,15 @@ async function main() {
   }
   console.log('Roles:', roles)
 
-  // Insert admin user
-  const hashedPassword = await bcrypt.hash('Admin1234!', 10)
-  await db.execute({
+  // Insert admin user — random one-time password, never hardcoded, since
+  // this script (and its git history) is world-readable in a public repo.
+  const tempPassword = randomBytes(9).toString('base64url')
+  const hashedPassword = await bcrypt.hash(tempPassword, 10)
+  const insertResult = await db.execute({
     sql: `INSERT OR IGNORE INTO "User" (email, password, name, active) VALUES (?, ?, ?, 1)`,
     args: ['admin@zircon.tech', hashedPassword, 'Administrador'],
   })
+  const adminUserCreated = insertResult.rowsAffected > 0
 
   const userResult = await db.execute({
     sql: `SELECT id FROM "User" WHERE email = ?`,
@@ -124,7 +128,12 @@ async function main() {
   }
 
   console.log('Permissions assigned.')
-  console.log('Done! Credentials: admin@zircon.tech / Admin1234!')
+  if (adminUserCreated) {
+    console.log('Done! Admin login: admin@zircon.tech')
+    console.log(`Temporary password (only shown once, change it after first login): ${tempPassword}`)
+  } else {
+    console.log('Done! admin@zircon.tech already existed — its password was not changed.')
+  }
 }
 
 main().catch(console.error)

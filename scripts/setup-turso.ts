@@ -97,26 +97,26 @@ async function seedData() {
   await prisma.project.deleteMany()
   await prisma.resource.deleteMany()
 
-  // Recursos
+  // Recursos — datos ficticios de demo, no personal real.
   const [pablo, betsabe, will, marcelo, claudio] = await Promise.all([
-    prisma.resource.create({ data: { name: 'Pablo', country: 'Argentina', color: '#4472C4', capacityH: 8 } }),
-    prisma.resource.create({ data: { name: 'Betsabé', country: 'Uruguay', color: '#ED7D31', capacityH: 8 } }),
-    prisma.resource.create({ data: { name: 'Will', country: 'Chile', color: '#A9D18E', capacityH: 8 } }),
-    prisma.resource.create({ data: { name: 'Marcelo', country: 'Argentina', color: '#FF0000', capacityH: 8 } }),
-    prisma.resource.create({ data: { name: 'Claudio', country: 'Argentina', color: '#7030A0', capacityH: 8 } }),
+    prisma.resource.create({ data: { name: 'Demo Uno', country: 'Argentina', color: '#4472C4', capacityH: 8 } }),
+    prisma.resource.create({ data: { name: 'Demo Dos', country: 'Uruguay', color: '#ED7D31', capacityH: 8 } }),
+    prisma.resource.create({ data: { name: 'Demo Tres', country: 'Chile', color: '#A9D18E', capacityH: 8 } }),
+    prisma.resource.create({ data: { name: 'Demo Cuatro', country: 'Argentina', color: '#FF0000', capacityH: 8 } }),
+    prisma.resource.create({ data: { name: 'Demo Cinco', country: 'Argentina', color: '#7030A0', capacityH: 8 } }),
   ])
   console.log('  ✓ Recursos creados')
 
-  // Proyectos
+  // Proyectos — nombres y tarifas ficticios de demo, no clientes reales.
   const [smartway, cidi, notificaciones, rrhh, seguridad, compras, reportes, mantenimiento] = await Promise.all([
-    prisma.project.create({ data: { name: 'SmartWay', color: '#4472C4', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-06-30'), estimatedHours: 320, costPerHour: 75, notes: 'Proyecto principal' } }),
-    prisma.project.create({ data: { name: 'CIDI', color: '#ED7D31', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-05-31'), estimatedHours: 240, costPerHour: 80 } }),
-    prisma.project.create({ data: { name: 'Notificaciones', color: '#A9D18E', status: 'Próximo', priority: 'Media', startDate: new Date('2026-04-01'), endDate: new Date('2026-06-30'), estimatedHours: 180, costPerHour: 70 } }),
-    prisma.project.create({ data: { name: 'RRHH Digital', color: '#FF0000', status: 'En planificación', priority: 'Media', startDate: new Date('2026-05-01'), endDate: new Date('2026-07-31'), estimatedHours: 160, costPerHour: 75 } }),
-    prisma.project.create({ data: { name: 'Seguridad', color: '#7030A0', status: 'Continuo', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-12-31'), estimatedHours: 400, costPerHour: 90 } }),
-    prisma.project.create({ data: { name: 'Compras Online', color: '#00B0F0', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-09'), endDate: new Date('2026-06-23'), estimatedHours: 280, costPerHour: 78 } }),
-    prisma.project.create({ data: { name: 'Reportes BI', color: '#FFC000', status: 'Próximo', priority: 'Baja', startDate: new Date('2026-04-13'), endDate: new Date('2026-06-23'), estimatedHours: 120, costPerHour: 65 } }),
-    prisma.project.create({ data: { name: 'Mantenimiento', color: '#808080', status: 'Continuo', priority: 'Media', startDate: new Date('2026-03-02'), endDate: new Date('2026-12-31'), estimatedHours: 200, costPerHour: 60 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo A', color: '#4472C4', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-06-30'), estimatedHours: 320, costPerHour: 50, notes: 'Proyecto principal' } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo B', color: '#ED7D31', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-05-31'), estimatedHours: 240, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo C', color: '#A9D18E', status: 'Próximo', priority: 'Media', startDate: new Date('2026-04-01'), endDate: new Date('2026-06-30'), estimatedHours: 180, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo D', color: '#FF0000', status: 'En planificación', priority: 'Media', startDate: new Date('2026-05-01'), endDate: new Date('2026-07-31'), estimatedHours: 160, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo E', color: '#7030A0', status: 'Continuo', priority: 'Alta', startDate: new Date('2026-03-02'), endDate: new Date('2026-12-31'), estimatedHours: 400, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo F', color: '#00B0F0', status: 'En ejecución', priority: 'Alta', startDate: new Date('2026-03-09'), endDate: new Date('2026-06-23'), estimatedHours: 280, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo G', color: '#FFC000', status: 'Próximo', priority: 'Baja', startDate: new Date('2026-04-13'), endDate: new Date('2026-06-23'), estimatedHours: 120, costPerHour: 50 } }),
+    prisma.project.create({ data: { name: 'Proyecto Demo H', color: '#808080', status: 'Continuo', priority: 'Media', startDate: new Date('2026-03-02'), endDate: new Date('2026-12-31'), estimatedHours: 200, costPerHour: 50 } }),
   ])
   console.log('  ✓ Proyectos creados')
 
