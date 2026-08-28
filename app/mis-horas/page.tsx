@@ -13,6 +13,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect'
 import StatCard from '@/components/ui/StatCard'
 import EmptyState from '@/components/ui/EmptyState'
 import { SkeletonRow } from '@/components/ui/Skeleton'
+import CopyLastWeekMenu from '@/components/ui/CopyLastWeekMenu'
 import type { Task, TimeEntry, Project } from '@/types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ export default function MisHorasPage() {
   const [pickerTaskId, setPickerTaskId] = useState('')
   const [newTaskName, setNewTaskName] = useState('')
   const [creatingTask, setCreatingTask] = useState(false)
+  const [copyingWeek, setCopyingWeek] = useState(false)
 
   const [tmProjectId, setTmProjectId] = useState('')
   const [tmYm, setTmYm] = useState(format(today, 'yyyy-MM'))
@@ -178,6 +180,76 @@ export default function MisHorasPage() {
   }, 0)
   const weekProjectCount = useMemo(() => new Set(rowKeys.map((k) => parseRowKey(k).projectId)).size, [rowKeys])
   const weekTaskCount = useMemo(() => rowKeys.filter((k) => parseRowKey(k).taskId != null).length, [rowKeys])
+
+  // "Copiar la semana pasada" — only ever actionable when this week is
+  // still empty (the button itself is disabled otherwise), so the query
+  // only fires when it could actually be used, not on every week navigated.
+  const lastWeekStart = isoDay(addWeeks(parseISO(weekStart), -1))
+  const lastWeekDaysArr = weekDays(lastWeekStart)
+  const { data: lastWeekEntries = EMPTY_ENTRIES } = useQuery<TimeEntry[]>({
+    queryKey: ['me-time-entries', lastWeekStart],
+    queryFn: () => fetchMeJson(`/api/me/time-entries?dateFrom=${lastWeekDaysArr[0]}&dateTo=${lastWeekDaysArr[6]}`),
+    enabled: mode === 'detailed' && weekTotal === 0,
+    retry: false,
+  })
+
+  function lastWeekRowKeySet() {
+    const s = new Set<string>()
+    for (const e of lastWeekEntries) {
+      if (e.hours > 0) s.add(rowKey(e.projectId, e.taskId))
+    }
+    return s
+  }
+
+  function copyActivitiesOnly() {
+    if (weekTotal > 0) return
+    const lastWeekKeys = lastWeekRowKeySet()
+    if (lastWeekKeys.size === 0) {
+      toast({ title: 'No hay actividades cargadas la semana pasada', variant: 'warning' })
+      return
+    }
+    const newKeys = Array.from(lastWeekKeys).filter((k) => !rowKeys.includes(k))
+    setSelectedRowKeys((prev) => [...prev, ...newKeys])
+  }
+
+  async function copyActivitiesAndTime() {
+    if (weekTotal > 0) return
+    const lastWeekKeys = lastWeekRowKeySet()
+    if (lastWeekKeys.size === 0) {
+      toast({ title: 'No hay actividades cargadas la semana pasada', variant: 'warning' })
+      return
+    }
+    setCopyingWeek(true)
+    try {
+      const writes: Promise<Response>[] = []
+      for (const key of Array.from(lastWeekKeys)) {
+        const { projectId, taskId } = parseRowKey(key)
+        for (let i = 0; i < 7; i++) {
+          const entry = lastWeekEntries.find(
+            (e) => e.projectId === projectId && e.taskId === taskId && e.date.substring(0, 10) === lastWeekDaysArr[i]
+          )
+          if (entry && entry.hours > 0) {
+            const thisDay = days[i]
+            writes.push(
+              fetch('/api/me/time-entries', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectId, taskId, date: `${thisDay}T12:00:00.000Z`, hours: entry.hours }),
+              })
+            )
+          }
+        }
+      }
+      await Promise.all(writes)
+      setSelectedRowKeys((prev) => [...prev, ...Array.from(lastWeekKeys).filter((k) => !prev.includes(k))])
+      await qc.invalidateQueries({ queryKey: ['me-time-entries', weekStart] })
+      toast({ title: 'Semana copiada', description: `${lastWeekKeys.size} actividades con sus horas`, variant: 'success' })
+    } catch {
+      toast({ title: 'Error al copiar la semana pasada', variant: 'error' })
+    } finally {
+      setCopyingWeek(false)
+    }
+  }
 
   function addRow() {
     if (!pickerProjectId || !pickerTaskId || pickerTaskId === '__new__') return
@@ -387,6 +459,19 @@ export default function MisHorasPage() {
             {weekTotal > 0 && (
               <span className="ml-auto font-semibold text-primary text-sm tabular-nums">Total: {formatHours(weekTotal)} hs</span>
             )}
+          </div>
+
+          {/* Copy-last-week — own row so it doesn't compete with the week
+              nav's ← / → / date for space on narrow screens. Disabled once
+              this week has any hours, so it can never overwrite data. */}
+          <div>
+            <CopyLastWeekMenu
+              disabled={weekTotal > 0}
+              loading={copyingWeek}
+              compact={isMobile}
+              onCopyActivitiesOnly={copyActivitiesOnly}
+              onCopyActivitiesAndTime={copyActivitiesAndTime}
+            />
           </div>
 
           {/* Summary cards — same visual language as Mi Reporte/Dashboard.
