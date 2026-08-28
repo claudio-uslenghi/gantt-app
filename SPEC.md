@@ -861,3 +861,76 @@ Sin suite automatizada — patrón ya usado en el repo: `npx tsc --noEmit` + `np
 ## Open Questions
 
 Ninguna — alcance confirmado con el usuario antes de escribir este spec.
+
+---
+
+# Spec: "Copiar la semana pasada" en Mis Horas (modo Detallado)
+
+## Objective
+
+Agregar a `/mis-horas` (modo Detallado) un botón "Copiar la semana pasada" equivalente al de Clockify (ver captura adjunta del usuario): un botón con menú desplegable de 2 opciones — **Copiar solo actividades** (trae las filas de proyecto/tarea de la semana anterior, sin horas) y **Copiar actividades y tiempo** (trae las filas *con* sus horas, día por día). El botón se deshabilita por completo si la semana actual ya tiene alguna hora cargada, para que nunca se use para pisar datos existentes.
+
+**Éxito** = con la semana actual vacía, el usuario puede traer de un clic las mismas filas (y opcionalmente las mismas horas) que cargó la semana anterior, en vez de recrearlas a mano una por una; en cuanto la semana actual tiene alguna hora, el botón queda visiblemente deshabilitado; se ve y se usa bien en mobile (no se rompe el layout ni el menú queda cortado).
+
+## Hallazgos clave de la exploración
+
+- `weekTotal` (`app/mis-horas/page.tsx:175`) ya es exactamente la condición que hace falta para el estado deshabilitado — es `> 0` apenas hay una sola hora cargada esta semana, en cualquier fila.
+- **Agregar una fila "solo actividad" ya es gratis hoy**: `addRow()` (línea 182) simplemente empuja un `rowKey` a `selectedRowKeys` — no pega al servidor. "Copiar solo actividades" es exactamente ese mismo mecanismo, aplicado en lote a los `rowKey` de la semana pasada.
+- **`@radix-ui/react-dropdown-menu` ya está instalado (`^2.1.16`) pero no se usa en ningún lado del repo** — mismo patrón que encontramos con `@radix-ui/react-toast` y `@radix-ui/react-alert-dialog` antes de este spec: la dependencia ya estaba, solo faltaba construir el componente. No hace falta ningún paquete nuevo. Tampoco hay ningún menú desplegable hoy en toda la app (ni siquiera el de "Cerrar sesión" en el sidebar, que es un botón plano) — este es el primero, pero Radix ya trae manejo de foco/teclado/posicionamiento-vía-portal resuelto, evitando de raíz el bug de recorte por `overflow` que ya tuvimos que arreglar una vez en `SearchableSelect`.
+- El endpoint `/api/me/time-entries` ya soporta todo lo necesario sin cambios: `GET` con `dateFrom`/`dateTo` para traer la semana pasada, y `PUT` upsert por celda (mismo que usa `saveCell` hoy) para escribir las horas copiadas.
+
+## Decisiones confirmadas
+
+1. **Alcance: solo modo Detallado.** El modo T&M ya tiene su propio mecanismo de "traer datos rápido" (Aplicar a todos los días + Guardar mes) — no se toca.
+2. **Deshabilitado ⟺ `weekTotal > 0`.** Exactamente como pidió el usuario: apenas hay una hora cargada esta semana (sin importar en qué fila), el botón entero queda deshabilitado. Como consecuencia, "Copiar actividades y tiempo" **nunca puede pisar datos existentes** — solo corre cuando la semana está vacía — así que no hace falta ningún diálogo de confirmación antes de copiar.
+3. **"Copiar solo actividades"**: junta los `(projectId, taskId)` distintos con horas > 0 en la semana pasada, y agrega los que falten a `selectedRowKeys` (igual que `addRow()`, en lote). No pega al servidor — las celdas quedan vacías, listas para tipear.
+4. **"Copiar actividades y tiempo"**: mismas filas, más sus horas replicadas al mismo día de la semana (lunes pasado → este lunes, etc.). Esto sí escribe al servidor: un `PUT` por cada celda con horas > 0 (en paralelo, `Promise.all`, mismo patrón que ya usa `removeRow` para los borrados en lote), con una sola invalidación de la query al final — no una por celda, para no disparar N refetch en cadena.
+5. **Si la semana pasada está vacía**: clickear cualquiera de las 2 opciones muestra `toast({ variant: 'warning', title: 'No hay actividades cargadas la semana pasada' })` y no hace nada más. Se eligió **no** precalcular esto para pre-deshabilitar el botón, porque implicaría traer la semana pasada en cada visita a una semana vacía (el caso más común, ej. lunes a la mañana) sin necesidad — el costo de una query extra no se justifica solo para decidir un estado visual; el toast al clickear ya comunica lo mismo con un costo de red bien acotado (solo se pide la semana pasada cuando el usuario efectivamente clickea).
+6. **Fetch de "semana pasada" es perezoso**: nuevo `useQuery` con `dateFrom`/`dateTo` = semana actual − 7 días, `enabled: mode === 'detailed' && weekTotal === 0` — solo se dispara cuando el botón podría llegar a usarse, no en cada navegación de semana.
+7. **Componente nuevo `components/ui/CopyLastWeekMenu.tsx`**: wrapper delgado sobre `@radix-ui/react-dropdown-menu` (Root/Trigger/Portal/Content/Item), mismo lenguaje visual que el resto de `components/ui/*` (borde gris, texto `text-sm`, hover `bg-gray-50`). Recibe `disabled`, `loading`, `onCopyActivitiesOnly`, `onCopyActivitiesAndTime`.
+8. **Mobile**: el botón vive en su propia fila, debajo de la barra de navegación de semana (no se mete dentro del `flex-wrap` que ya tiene esa barra, para no competir por espacio con las flechas `←`/`→` y la fecha). La etiqueta se acorta a "Copiar semana" en mobile (vía `useIsMobile()`, mismo hook ya usado en toda la página) y a "Copiar la semana pasada" en desktop. El menú desplegable de Radix ya maneja colisión con los bordes del viewport automáticamente (vía Popper), así que no hace falta lógica de posicionamiento a mano.
+9. **No se toca** ninguna otra pantalla, ni el modo T&M, ni la lógica de `saveCell`/`removeRow`/`addRow` existentes — son llamadas nuevas que reusan esas mismas piezas.
+
+## Tech Stack
+
+Sin dependencias nuevas — `@radix-ui/react-dropdown-menu` ya está en `package.json`.
+
+## Project Structure
+
+```
+components/ui/CopyLastWeekMenu.tsx  -> NUEVO: split-button + menú (Radix DropdownMenu)
+app/mis-horas/page.tsx              -> +useQuery semana pasada (lazy), +copyActivitiesOnly(), +copyActivitiesAndTime(), +fila de toolbar bajo el week-nav
+```
+
+## Code Style
+
+Mismo patrón que el resto de `components/ui/*`: componente chico, sin estado propio más allá de lo que expone Radix, estilos Tailwind directos (sin CSS módulos). `copyActivitiesAndTime()` sigue el mismo estilo `async function` + `Promise.all` + una sola `invalidateQueries` al final que ya usa `removeRow()`.
+
+## Testing Strategy
+
+Sin suite automatizada — patrón ya usado en el repo: `npx tsc --noEmit` + `npm run build` + QA manual en navegador. Casos a verificar explícitamente:
+- Semana actual vacía, semana pasada con 2 filas y horas: "Copiar solo actividades" trae las 2 filas sin horas; "Copiar actividades y tiempo" trae las 2 filas con las horas en los mismos días de esta semana.
+- Semana actual con al menos 1 hora cargada: el botón entero aparece deshabilitado (ambas opciones inalcanzables).
+- Semana pasada vacía: clickear cualquiera de las 2 opciones muestra el toast de advertencia, no rompe nada.
+- Mobile (`resize_window` a 375×812): el botón no se corta ni tapa la barra de navegación de semana; el menú desplegable se ve completo, sin quedar recortado por ningún contenedor con `overflow`.
+- `git diff --stat` confirma cero cambios fuera de los 2 archivos listados.
+
+## Boundaries
+
+- **Always**: mantener el guard `disabled={weekTotal > 0}` como única condición de habilitado — no agregar checks adicionales que puedan dejarlo habilitado con datos ya cargados.
+- **Ask first**: cualquier cambio a `saveCell`/`removeRow`/`addRow` existentes, o extender esta función al modo T&M.
+- **Never**: escribir al servidor si `weekTotal > 0` (aunque la UI ya lo previene deshabilitando el botón, la función de copia no debe asumir que nunca la van a llamar en ese estado — conviene un guard defensivo al principio de `copyActivitiesAndTime()` también).
+
+## Success Criteria
+
+1. Con la semana actual vacía, "Copiar solo actividades" agrega las filas de la semana pasada sin horas.
+2. Con la semana actual vacía, "Copiar actividades y tiempo" agrega las filas *y* las horas, alineadas al mismo día de la semana.
+3. Con la semana actual con alguna hora cargada, el botón completo aparece deshabilitado.
+4. Con la semana pasada vacía, clickear cualquier opción muestra el toast de advertencia sin romper nada.
+5. Se ve y se usa correctamente en mobile (375px): sin cortes, sin menú recortado.
+6. `git diff --stat` confirma cambios solo en los 2 archivos listados.
+7. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+
+## Open Questions
+
+Ninguna.
