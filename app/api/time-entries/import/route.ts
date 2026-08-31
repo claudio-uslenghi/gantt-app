@@ -9,6 +9,18 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleImport(req)
+  } catch (err) {
+    // An uncaught throw here previously reached the client as an empty
+    // 500 body (Vercel truncates it), which surfaces as a confusing
+    // "Unexpected end of JSON input" — always return real JSON instead.
+    console.error('time-entries/import failed:', err)
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Import failed' }, { status: 500 })
+  }
+}
+
+async function handleImport(req: NextRequest) {
   const session = await getServerSession(authOptions)
   const roles = (session?.user as { roles?: string[] })?.roles ?? []
   if (!roles.includes('admin')) {
@@ -82,8 +94,37 @@ export async function POST(req: NextRequest) {
     } satisfies ImportTimeEntriesResult)
   }
 
-  // Count existing records before batch (simple, no complex OR)
-  const countBefore = await prisma.timeEntry.count()
+  // The real unique constraint is (resourceId, projectId, date, entryType,
+  // taskId) — 5 columns, not 4 — and SQLite treats every NULL as distinct
+  // in a unique index, so an `ON CONFLICT (resourceId, projectId, date,
+  // entryType)` target (a) doesn't match any actual index (SQLite errors
+  // on every insert) and (b) would never fire for taskId IS NULL rows
+  // anyway even if it did. Imported entries never have a taskId, so we
+  // look up existing rows explicitly instead — same pattern already used
+  // in /api/me/time-entries for this same NULL-taskId case.
+  // Scoped by resourceId only (no date range filter) — SQLite/Turso can
+  // store the datetime with enough floating-point drift that an exact-
+  // boundary gte/lte range silently excludes rows whose stored value is a
+  // fraction of a millisecond outside it, which caused a real duplicate
+  // row in testing. Matching is done purely on the YYYY-MM-DD substring
+  // below, which is immune to that.
+  const resourceIds = Array.from(new Set(resolved.map((e) => e.resourceId)))
+  const existing = await prisma.timeEntry.findMany({
+    where: { taskId: null, resourceId: { in: resourceIds } },
+    select: { id: true, resourceId: true, projectId: true, date: true, entryType: true },
+  })
+  const existingMap = new Map(
+    existing.map((e) => [`${e.resourceId}:${e.projectId}:${e.date.toISOString().substring(0, 10)}:${e.entryType}`, e.id])
+  )
+
+  const toInsert: ResolvedEntry[] = []
+  const toUpdate: { id: number; hours: number }[] = []
+  for (const e of resolved) {
+    const key = `${e.resourceId}:${e.projectId}:${e.date.substring(0, 10)}:${e.entryType}`
+    const existingId = existingMap.get(key)
+    if (existingId) toUpdate.push({ id: existingId, hours: e.hours })
+    else toInsert.push(e)
+  }
 
   // Use libSQL batch for performance (single HTTP round-trip to Turso)
   const turso = createClient({
@@ -93,24 +134,30 @@ export async function POST(req: NextRequest) {
 
   // Process in chunks of 1000 to avoid request size limits
   const CHUNK = 1000
-  for (let i = 0; i < resolved.length; i += CHUNK) {
-    const chunk = resolved.slice(i, i + CHUNK)
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const chunk = toInsert.slice(i, i + CHUNK)
     await turso.batch(
       chunk.map((e) => ({
-        sql: `INSERT INTO "TimeEntry" (resourceId, projectId, date, hours, entryType)
-              VALUES (?, ?, ?, ?, ?)
-              ON CONFLICT (resourceId, projectId, date, entryType) DO UPDATE SET hours = excluded.hours`,
+        sql: `INSERT INTO "TimeEntry" (resourceId, projectId, date, hours, entryType) VALUES (?, ?, ?, ?, ?)`,
         args: [e.resourceId, e.projectId, e.date, e.hours, e.entryType],
+      })),
+      'write'
+    )
+  }
+  for (let i = 0; i < toUpdate.length; i += CHUNK) {
+    const chunk = toUpdate.slice(i, i + CHUNK)
+    await turso.batch(
+      chunk.map((u) => ({
+        sql: `UPDATE "TimeEntry" SET hours = ? WHERE id = ?`,
+        args: [u.hours, u.id],
       })),
       'write'
     )
   }
   turso.close()
 
-  // Count after to determine inserts vs updates
-  const countAfter = await prisma.timeEntry.count()
-  const inserted = countAfter - countBefore
-  const updated = resolved.length - inserted
+  const inserted = toInsert.length
+  const updated = toUpdate.length
 
   return NextResponse.json({
     inserted,
