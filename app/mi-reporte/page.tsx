@@ -132,6 +132,17 @@ export default function MiReportePage() {
     setDateTo(`${y}-${m}-${String(lastDay).padStart(2, '0')}`)
   }
 
+  // "Este mes" / "Mes anterior" — quick alternative to typing Desde/Hasta by
+  // hand, which was the only way to change month before this.
+  const selectMonth = (monthsAgo: number) => {
+    const target = new Date(today.getFullYear(), today.getMonth() - monthsAgo, 1)
+    const ty = target.getFullYear()
+    const tm = String(target.getMonth() + 1).padStart(2, '0')
+    const tLastDay = new Date(ty, target.getMonth() + 1, 0).getDate()
+    setDateFrom(`${ty}-${tm}-01`)
+    setDateTo(`${ty}-${tm}-${String(tLastDay).padStart(2, '0')}`)
+  }
+
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
       <div>
@@ -161,6 +172,14 @@ export default function MiReportePage() {
           <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
             className="border border-gray-300 rounded px-2 py-1.5 text-sm" />
         </div>
+        <button onClick={() => selectMonth(0)}
+          className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-3 py-1.5">
+          Este mes
+        </button>
+        <button onClick={() => selectMonth(1)}
+          className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-3 py-1.5">
+          Mes anterior
+        </button>
         <button onClick={resetFilters}
           className="text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded px-3 py-1.5">
           Limpiar
