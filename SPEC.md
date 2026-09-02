@@ -934,3 +934,68 @@ Sin suite automatizada — patrón ya usado en el repo: `npx tsc --noEmit` + `np
 ## Open Questions
 
 Ninguna.
+
+---
+
+# Spec: Investigación bug "borrar horas no guarda" + filtro de mes en Mi Reporte
+
+## Objective
+
+Dos pedidos del usuario:
+1. **Bug reportado**: en Mis Horas, modo Detallado, borrar las horas de una celda o ponerla en 0 "no guarda el cambio".
+2. **Feature**: en Mi Reporte, agregar un filtro rápido para seleccionar el mes anterior — hoy la única forma de cambiar de mes es escribir a mano en los campos Desde/Hasta.
+
+## Hallazgos clave de la investigación (bug #1)
+
+Se investigó a fondo y **no se pudo reproducir el bug con el código actual**, verificado contra la base real (Turso de dev, misma que producción) con datos de prueba descartables:
+
+- Se leyó el código completo de guardado (`onBlur` en ambas vistas — mobile y desktop — y el endpoint `PUT /api/me/time-entries`, que ya hace `hours <= 0` → borra la entrada, patrón correcto).
+- Un primer intento de reproducir vía eventos sintéticos de foco (`.focus()`/`.blur()`) no disparó el handler `onBlur` — **pero esto resultó ser una limitación del entorno de pruebas** (el pane de este entorno no renderiza con compositing real), no un bug de la app: al disparar el evento `focusout` directamente (el que React 17+ usa para `onBlur`), el handler se ejecutó correctamente, llamó a `saveCell`, se hizo el `PUT`, y la entrada **se borró correctamente** en la base — confirmado con una consulta directa a la DB antes y después.
+- La lógica es idéntica entre la vista desktop y mobile (mismo patrón `val === '' ? 0 : Number(...)`, mismo chequeo de "no cambió, no hagas nada", mismo `saveCell`) — no se encontró ninguna asimetría entre ambas.
+- **Hipótesis más probable si el usuario vio esto en producción**: el bug de remount global (`refreshKey`) corregido en un spec anterior de esta misma sesión (el que le robaba el foco a las celdas al tabular) pudo causar exactamente este síntoma — "cargo algo, parece que no quedó" — antes de ser corregido y mergeado. Si el usuario probó esto antes de que ese fix llegara a producción, es consistente con lo que reportó.
+
+**No se aplica ningún cambio de código para el bug #1 en este spec** — no hay nada concreto que arreglar sin poder reproducirlo, y tocar código de guardado a ciegas es más riesgoso que útil. Se deja como pregunta abierta (ver abajo) para pedir un repro más específico si el usuario lo sigue viendo en el sitio actual.
+
+## Decisiones confirmadas (feature #2 — filtro de mes en Mi Reporte)
+
+1. **2 botones rápidos** "Este mes" / "Mes anterior" en la barra de filtros existente, junto a los campos Desde/Hasta (que se mantienen intactos para rangos custom) — mismo lenguaje visual que el botón "Limpiar" ya existente (borde gris, texto chico).
+2. Cada botón simplemente recalcula `dateFrom`/`dateTo` a los límites del mes correspondiente y los aplica con `setDateFrom`/`setDateTo` — reutiliza exactamente la misma lógica que ya usa `resetFilters()` para "este mes", generalizada para aceptar un offset de meses.
+3. **No se agrega un `<input type="month">` nuevo** (aunque el patrón ya existe en el modo T&M de Mis Horas) — los botones rápidos resuelven el pedido concreto ("mes anterior") con menos superficie de UI nueva; los campos Desde/Hasta siguen ahí para cualquier rango que no sea "este mes" o "mes pasado".
+4. Mobile: los botones entran en el mismo contenedor `flex-wrap` que ya tiene la barra de filtros — sin tratamiento especial, ya es responsive.
+
+## Tech Stack
+
+Sin cambios, sin dependencias nuevas.
+
+## Project Structure
+
+```
+app/mi-reporte/page.tsx  -> +2 botones de mes rápido en la barra de filtros
+```
+
+## Code Style
+
+Mismo patrón que `resetFilters()` ya usa (calcular `y`/`m`/`lastDay` con `Date` nativo, sin `date-fns` para esto en particular ya que el resto del archivo tampoco lo usa para estos cálculos puntuales).
+
+## Testing Strategy
+
+Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual: clickear "Mes anterior" y confirmar que Desde/Hasta cambian al mes previo completo y la tabla se actualiza; clickear "Este mes" y confirmar que vuelve al mes actual.
+
+## Boundaries
+
+- **Always**: mantener los campos Desde/Hasta funcionando igual que hoy para rangos custom.
+- **Ask first**: cualquier cambio a `PUT /api/me/time-entries` o a los handlers `onBlur` de Mis Horas, dado que no hay bug confirmado que justifique tocarlos en este spec.
+- **Never**: modificar el guardado de horas de Mis Horas sin un repro confirmado.
+
+## Success Criteria
+
+1. Botón "Mes anterior" en Mi Reporte cambia Desde/Hasta al mes calendario previo completo.
+2. Botón "Este mes" vuelve al mes actual.
+3. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+
+## Open Questions
+
+- **Bug #1 sigue abierto**. El usuario confirmó que lo vio tanto en celular como en computadora, así que se probaron 2 hipótesis adicionales contra la base real, ninguna reprodujo el problema:
+  - Borrado de una sola celda con evento de blur real (no sintético): funciona, la entrada se borra correctamente.
+  - 3 borrados disparados en simultáneo (sin esperar uno a que termine, simulando tabular rápido entre celdas de días distintos de la misma fila): las 3 se guardan correctamente, sin ninguna perdida por carrera.
+  - Sigue pendiente: reproducirlo una vez en el sitio real y revisar la pestaña Network del navegador en el momento exacto en que "no guarda" — como se hizo para el bug de importación de Clockify (esa captura fue clave para encontrar la causa real). Puntualmente interesa ver si sale una request `PUT /api/me/time-entries`, y si sale, qué responde.
