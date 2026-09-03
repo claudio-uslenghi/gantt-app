@@ -999,3 +999,90 @@ Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual: cli
   - Borrado de una sola celda con evento de blur real (no sintético): funciona, la entrada se borra correctamente.
   - 3 borrados disparados en simultáneo (sin esperar uno a que termine, simulando tabular rápido entre celdas de días distintos de la misma fila): las 3 se guardan correctamente, sin ninguna perdida por carrera.
   - Sigue pendiente: reproducirlo una vez en el sitio real y revisar la pestaña Network del navegador en el momento exacto en que "no guarda" — como se hizo para el bug de importación de Clockify (esa captura fue clave para encontrar la causa real). Puntualmente interesa ver si sale una request `PUT /api/me/time-entries`, y si sale, qué responde.
+
+---
+
+# Spec: Tareas desde Clockify — import, unicidad por proyecto, y desglose por tarea en Mi Reporte
+
+## Objective
+
+Tres cambios relacionados, todos alrededor de que las tareas ("Task") ahora importan en el flujo de importación de Clockify (hasta ahora ignoradas — toda entrada importada quedaba con `taskId: null`, tratada como Time & Material):
+
+1. La importación de CSV de Clockify lee la columna "Tarea" y resuelve/crea el `Task` correspondiente en cada `TimeEntry` importada.
+2. `Task.name` pasa a ser único dentro de cada proyecto — ya no se pueden crear dos tareas con el mismo nombre en el mismo proyecto, ni por API ni por CSV.
+3. Mi Reporte muestra el desglose de horas por tarea dentro de cada proyecto, además del total por proyecto que ya existe.
+
+**Éxito** = importar un CSV real de Clockify crea/reutiliza las tareas correctas y les atribuye las horas correctamente (sin mezclar tareas distintas del mismo día); no se pueden crear tareas duplicadas por nombre en un proyecto; Mi Reporte muestra cuánto se cargó por tarea; nada de lo que ya funciona (Mis Horas, Reporte Diario admin, el pivot de Mi Reporte) se rompe.
+
+## Hallazgos clave (verificado contra CSV real + producción)
+
+- **CSV real analizado** (`Clockify_Informe_De_Tiempo_Detallado_01_08_2026-31_08_2026 (4).csv`, 407 filas): confirma que los índices ya usados por `parseClockifyCsv()` (Proyecto=0, Usuario=5, Email=7, Fecha=10, Duración=15) son correctos para el export real de esta cuenta. La columna **"Tarea" está en el índice 3**, hoy completamente ignorada. A veces viene vacía — sigue significando "sin tarea", igual que hoy.
+- El agrupador actual del CSV suma filas por `email|proyecto|fecha` — **sin la tarea en esa clave, filas del mismo proyecto/persona/día pero de tareas DISTINTAS se sumarían incorrectamente en una sola entrada**. Se confirmó en el CSV real que este caso existe (mismo proyecto/persona/día, tareas distintas en filas separadas). Hay que agregar la tarea a esa clave de agrupación.
+- `Task.name` no tiene ninguna restricción de unicidad hoy (documentado como decisión explícita de un spec anterior). Se revisó la base real: **solo 13 tareas cargadas en total, 0 duplicados** — se puede agregar la restricción directo, sin limpieza de datos previa.
+- El endpoint de importación (`app/api/time-entries/import/route.ts`, reescrito en el spec anterior para el bug del 500) tiene su lógica de upsert **hard-codeada a `taskId: null`** en todos lados — el `identity` de búsqueda, el INSERT crudo. Es el único lugar que necesita reescritura real para el punto 1.
+- El resto de la app (Mis Horas Detallado, `weekTotal`, el pivot de Mi Reporte) ya está diseñado para tolerar múltiples filas por `(resourceId, projectId, date)` diferenciadas solo por `taskId` (incluido `null`) — la suma siempre es por fila, nunca colapsando antes por `(resource,project,date)`. Introducir `taskId` reales en las entradas importadas **no rompe ningún total existente**.
+- El pivot de Mi Reporte (`lib/time-entries-pivot.ts`) agrupa solo por `(resourceId, projectId)` — no tiene dimensión de tarea, ni siquiera trae la relación `task`. **La columna "Total" por proyecto que ya existe en Mi Reporte ya es la suma de todas las horas de ese proyecto**, tenga tarea o no — el pedido "el total tiene que ser la suma de todas las tareas" ya se cumple automáticamente, no requiere cambiar el cálculo del total.
+- **Riesgo real para "no romper hacia atrás"**: si se reimporta un mes ya importado ANTES de este cambio (con `taskId: null` en todas sus filas), la nueva lógica busca una fila existente con el `taskId` recién resuelto, no la encuentra (la vieja es `taskId: null`, identidad distinta) y crea una fila NUEVA — duplicando horas ese día. La app ya tiene el flujo correcto para esto: **"Eliminar horas por mes"** en `admin/hours`, pensado exactamente para reimportar sin duplicar. Se documenta como comportamiento esperado; no se construye lógica de fusión automática de filas viejas sin tarea con las nuevas (evita over-engineering sobre un caso ya cubierto por un flujo existente).
+
+## Decisiones confirmadas
+
+1. **Columna del CSV**: `parseClockifyCsv()` lee `cols[3]` ("Tarea"), trimeada; vacía → sin tarea (igual que hoy). Se agrega `taskName` a `ParsedTimeEntry` (opcional) y a la clave de agrupación (`email|proyecto|tarea|fecha`) para no mezclar horas de tareas distintas en una misma entrada.
+2. **Resolución de tarea en el import**: dentro del `projectId` ya resuelto, match case-insensitive contra `Task.name` existente; si no hay match, se crea la tarea con el nombre tal cual viene de Clockify. Mismo patrón que ya existe para recursos/proyectos (`Map<string, number>`), pero scopeado por proyecto (`Task.name` no es único globalmente). Las tareas creadas durante un mismo import se agregan al mapa en memoria para que filas siguientes del mismo archivo reusen el id recién creado.
+3. **`Task.name` único por proyecto**: `@@unique([projectId, name])` en el schema + migración (segura, 0 duplicados hoy). Además, chequeo case-insensitive en `POST /api/tasks` y `PUT /api/tasks/[id]` (y en la resolución del import) para que "Testing" y "testing" no convivan como tareas distintas — el constraint de DB solo cubre duplicados exactos; la validación case-insensitive vive en la capa de aplicación. Crear una tarea duplicada desde la UI (Mis Horas o `ProjectModal`) muestra un toast de error en vez de fallar en silencio.
+4. **Reescritura del upsert de import**: el patrón "buscar existentes, separar en insertar/actualizar" (ya usado en el fix del bug 500) se generaliza para incluir `taskId` (nulo o no) en la identidad de cada fila, en vez de estar hard-codeado a `taskId: null`. Mismo patrón de dos lotes (`toInsert`/`toUpdate`) vía `turso.batch()`.
+5. **Mi Reporte — desglose por tarea**: tabla nueva y separada, "Horas por tarea" (Proyecto — Tarea — Horas), debajo de la tabla pivot existente — **no se toca `buildTimeEntriesPivot`** (evita cualquier riesgo de regresión en `admin/daily-report`, que comparte esa función). Nueva query liviana, agrupa por `(projectId, taskId)` sobre el mismo rango de fechas/proyecto ya filtrado. Filas sin tarea (T&M) se agrupan bajo "Sin tarea". Ordenada por proyecto, luego por horas descendente.
+6. **Alcance: solo importaciones nuevas, hacia adelante** — según lo pedido ("a partir de ahora hay que tener en cuenta"). No se reprocesan entradas ya importadas antes de este cambio.
+7. **Las 13 tareas ya cargadas hoy** se dejan como están (no se borran automáticamente) — si el nombre coincide con una tarea de Clockify, el import la reusa; si no, crea una nueva al lado. Ver Open Questions.
+
+## Tech Stack
+
+Sin librerías nuevas. Requiere una migración de schema (`@@unique([projectId, name])` en `Task`) aplicada contra Turso vía script, mismo patrón que migraciones anteriores del repo.
+
+## Project Structure
+
+```
+prisma/schema.prisma                  -> Task: +@@unique([projectId, name])
+scripts/add-task-unique-constraint.ts -> NUEVO: migración idempotente contra Turso
+app/admin/hours/page.tsx              -> parseClockifyCsv(): +taskName en la clave de agrupación y en ParsedTimeEntry
+types/index.ts                        -> ParsedTimeEntry: +taskName?: string
+app/api/time-entries/import/route.ts  -> resolución de taskId (match-or-create scopeado por proyecto) + upsert task-aware
+app/api/tasks/route.ts                -> POST: valida nombre duplicado (case-insensitive) dentro del proyecto
+app/api/tasks/[id]/route.ts           -> PUT: misma validación al renombrar
+app/mis-horas/page.tsx                -> createTask(): maneja el error de nombre duplicado con toast
+components/modals/ProjectModal.tsx    -> addTask(): mismo manejo de error
+lib/time-entries-pivot.ts             -> SIN CAMBIOS (confirmado que no hace falta tocarlo)
+app/mi-reporte/page.tsx               -> +tabla "Horas por tarea" (nueva sección, nueva query)
+app/api/me/time-entries/route.ts      -> +vista de agregación por tarea, scopeada al resourceId propio
+```
+
+## Code Style
+
+Reutiliza patrones ya establecidos: `Map<string, number>` para resolución de nombres (mismo estilo que `resourceMap`/`projectMap`), toast para errores de validación (`variant: 'error'`), el mismo patrón de dos lotes insert/update vía `turso.batch()` ya usado en el fix del bug 500.
+
+## Testing Strategy
+
+Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual con el CSV real, contra datos de prueba descartables:
+- Importar el CSV real (o un subconjunto): confirmar que las tareas se crean con los nombres correctos y las horas quedan atribuidas a la tarea correcta (no mezcladas entre tareas del mismo proyecto/día).
+- Confirmar que las filas del CSV sin tarea siguen importándose igual que hoy (`taskId: null`).
+- Intentar crear una tarea con nombre duplicado (mismo proyecto) desde `POST /api/tasks` y desde la UI de Mis Horas → error claro, no crea la tarea.
+- Confirmar que el total por proyecto en Mi Reporte sigue siendo la suma correcta de todas sus tareas + entradas sin tarea.
+- Confirmar que la tabla nueva "Horas por tarea" en Mi Reporte muestra los valores correctos para el rango filtrado.
+- `git diff --stat` confirma que `lib/time-entries-pivot.ts` y `admin/daily-report` no fueron tocados.
+
+## Boundaries
+
+- **Always**: resolver `taskId` scopeado por `projectId` (nunca un match global de nombre de tarea entre proyectos distintos); mantener el comportamiento de "sin tarea" para filas del CSV sin columna Tarea.
+- **Ask first**: borrar las 13 tareas ya existentes hoy (ver Open Questions); reprocesar/backfill de entradas ya importadas antes de este cambio.
+- **Never**: tocar `lib/time-entries-pivot.ts` ni `admin/daily-report` para este spec; fusionar automáticamente filas viejas `taskId: null` con las nuevas filas con tarea al reimportar un mes ya importado (el flujo correcto es "Eliminar horas por mes" antes de reimportar, ya existente).
+
+## Success Criteria
+
+1. Importar el CSV real adjuntado crea las tareas correspondientes y las asocia correctamente a cada `TimeEntry`.
+2. No se pueden crear 2 tareas con el mismo nombre (case-insensitive) en el mismo proyecto, ni por API ni por UI.
+3. Mi Reporte muestra el desglose de horas por tarea, además del total por proyecto (ya existente, sin cambios).
+4. `git diff --stat` confirma cero cambios en `lib/time-entries-pivot.ts`, `admin/daily-report`, Gantt, Control de Horas.
+5. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+
+## Open Questions
+
+- ¿Borro las 13 tareas ya cargadas hoy para arrancar limpio, o las dejo? (si el nombre coincide con lo que trae Clockify se van a reusar solas; si no, van a convivir con las nuevas sin romper nada — no es necesario borrarlas para que esto funcione).

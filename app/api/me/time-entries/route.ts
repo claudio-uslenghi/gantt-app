@@ -54,6 +54,38 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(pivot)
     }
 
+    // Hours-by-task breakdown for Mi Reporte — a separate, lightweight
+    // aggregation deliberately kept out of buildTimeEntriesPivot(), which
+    // admin/daily-report also depends on and has no task dimension today.
+    if (view === 'by-task') {
+      const grouped = await prisma.timeEntry.groupBy({
+        by: ['projectId', 'taskId'],
+        where,
+        _sum: { hours: true },
+      })
+      const projectIds = Array.from(new Set(grouped.map((g) => g.projectId)))
+      const taskIds = Array.from(new Set(grouped.map((g) => g.taskId).filter((id): id is number => id != null)))
+      const [projects, tasks] = await Promise.all([
+        prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, name: true, color: true } }),
+        prisma.task.findMany({ where: { id: { in: taskIds } }, select: { id: true, name: true } }),
+      ])
+      const projectById = new Map(projects.map((p) => [p.id, p]))
+      const taskById = new Map(tasks.map((t) => [t.id, t]))
+
+      const byTask = grouped
+        .map((g) => ({
+          projectId: g.projectId,
+          projectName: projectById.get(g.projectId)?.name ?? `Proyecto #${g.projectId}`,
+          projectColor: projectById.get(g.projectId)?.color ?? '#9ca3af',
+          taskId: g.taskId,
+          taskName: g.taskId != null ? taskById.get(g.taskId)?.name ?? `Tarea #${g.taskId}` : 'Sin tarea',
+          hours: g._sum.hours ?? 0,
+        }))
+        .sort((a, b) => a.projectName.localeCompare(b.projectName) || b.hours - a.hours)
+
+      return NextResponse.json(byTask)
+    }
+
     const entries = await prisma.timeEntry.findMany({
       where,
       include: {

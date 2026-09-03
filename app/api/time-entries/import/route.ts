@@ -37,6 +37,7 @@ async function handleImport(req: NextRequest) {
   // Build lookup maps (case-insensitive)
   const resources = await prisma.resource.findMany({ select: { id: true, name: true } })
   const projects = await prisma.project.findMany({ select: { id: true, name: true } })
+  const tasks = await prisma.task.findMany({ select: { id: true, projectId: true, name: true } })
 
   const resourceMap = new Map<string, number>(
     resources.map((r) => [r.name.toLowerCase().trim(), r.id])
@@ -44,11 +45,18 @@ async function handleImport(req: NextRequest) {
   const projectMap = new Map<string, number>(
     projects.map((p) => [p.name.toLowerCase().trim(), p.id])
   )
+  // Scoped by projectId, unlike resourceMap/projectMap — Task.name is only
+  // unique per project (enforced by @@unique([projectId, name])), never
+  // globally, so the key has to carry the project too.
+  const taskMap = new Map<string, number>(
+    tasks.map((t) => [`${t.projectId}:${t.name.toLowerCase().trim()}`, t.id])
+  )
+  let tasksCreated = 0
 
   const unmatchedResources = new Set<string>()
   const unmatchedProjects = new Set<string>()
 
-  type ResolvedEntry = { resourceId: number; projectId: number; date: string; hours: number; entryType: string }
+  type ResolvedEntry = { resourceId: number; projectId: number; taskId: number | null; date: string; hours: number; entryType: string }
   const resolved: ResolvedEntry[] = []
 
   for (const e of entries) {
@@ -80,7 +88,24 @@ async function handleImport(req: NextRequest) {
       continue
     }
 
-    resolved.push({ resourceId, projectId, date: e.date, hours: e.hours, entryType: e.entryType ?? 'regular' })
+    // Empty "Tarea" column stays taskId: null — same as today (T&M-style).
+    // Otherwise match case-insensitively within this project, creating the
+    // task on first sight — Clockify is the source of truth for task names
+    // going forward, per the user's decision.
+    let taskId: number | null = null
+    const taskName = e.taskName?.trim()
+    if (taskName) {
+      const taskKey = `${projectId}:${taskName.toLowerCase()}`
+      taskId = taskMap.get(taskKey) ?? null
+      if (taskId == null) {
+        const created = await prisma.task.create({ data: { projectId, name: taskName } })
+        taskId = created.id
+        taskMap.set(taskKey, taskId)
+        tasksCreated++
+      }
+    }
+
+    resolved.push({ resourceId, projectId, taskId, date: e.date, hours: e.hours, entryType: e.entryType ?? 'regular' })
   }
 
   if (!resolved.length) {
@@ -88,6 +113,7 @@ async function handleImport(req: NextRequest) {
       inserted: 0,
       updated: 0,
       skipped: entries.length,
+      tasksCreated,
       unmatchedResources: Array.from(unmatchedResources),
       unmatchedProjects: Array.from(unmatchedProjects),
       errors: [],
@@ -95,13 +121,13 @@ async function handleImport(req: NextRequest) {
   }
 
   // The real unique constraint is (resourceId, projectId, date, entryType,
-  // taskId) — 5 columns, not 4 — and SQLite treats every NULL as distinct
-  // in a unique index, so an `ON CONFLICT (resourceId, projectId, date,
-  // entryType)` target (a) doesn't match any actual index (SQLite errors
-  // on every insert) and (b) would never fire for taskId IS NULL rows
-  // anyway even if it did. Imported entries never have a taskId, so we
-  // look up existing rows explicitly instead — same pattern already used
-  // in /api/me/time-entries for this same NULL-taskId case.
+  // taskId) — 5 columns — and SQLite treats every NULL as distinct in a
+  // unique index, so an `ON CONFLICT` target can't reliably match rows
+  // where taskId is null. Look up existing rows explicitly instead — same
+  // pattern already used in /api/me/time-entries for this case. taskId is
+  // folded into the lookup key as the string 'none' for null (matching the
+  // rowKey() convention already used in app/mis-horas/page.tsx), so entries
+  // are matched per-task, not collapsed across tasks for the same day.
   // Scoped by resourceId only (no date range filter) — SQLite/Turso can
   // store the datetime with enough floating-point drift that an exact-
   // boundary gte/lte range silently excludes rows whose stored value is a
@@ -110,17 +136,20 @@ async function handleImport(req: NextRequest) {
   // below, which is immune to that.
   const resourceIds = Array.from(new Set(resolved.map((e) => e.resourceId)))
   const existing = await prisma.timeEntry.findMany({
-    where: { taskId: null, resourceId: { in: resourceIds } },
-    select: { id: true, resourceId: true, projectId: true, date: true, entryType: true },
+    where: { resourceId: { in: resourceIds } },
+    select: { id: true, resourceId: true, projectId: true, taskId: true, date: true, entryType: true },
   })
   const existingMap = new Map(
-    existing.map((e) => [`${e.resourceId}:${e.projectId}:${e.date.toISOString().substring(0, 10)}:${e.entryType}`, e.id])
+    existing.map((e) => [
+      `${e.resourceId}:${e.projectId}:${e.taskId ?? 'none'}:${e.date.toISOString().substring(0, 10)}:${e.entryType}`,
+      e.id,
+    ])
   )
 
   const toInsert: ResolvedEntry[] = []
   const toUpdate: { id: number; hours: number }[] = []
   for (const e of resolved) {
-    const key = `${e.resourceId}:${e.projectId}:${e.date.substring(0, 10)}:${e.entryType}`
+    const key = `${e.resourceId}:${e.projectId}:${e.taskId ?? 'none'}:${e.date.substring(0, 10)}:${e.entryType}`
     const existingId = existingMap.get(key)
     if (existingId) toUpdate.push({ id: existingId, hours: e.hours })
     else toInsert.push(e)
@@ -138,8 +167,8 @@ async function handleImport(req: NextRequest) {
     const chunk = toInsert.slice(i, i + CHUNK)
     await turso.batch(
       chunk.map((e) => ({
-        sql: `INSERT INTO "TimeEntry" (resourceId, projectId, date, hours, entryType) VALUES (?, ?, ?, ?, ?)`,
-        args: [e.resourceId, e.projectId, e.date, e.hours, e.entryType],
+        sql: `INSERT INTO "TimeEntry" (resourceId, projectId, taskId, date, hours, entryType) VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [e.resourceId, e.projectId, e.taskId, e.date, e.hours, e.entryType],
       })),
       'write'
     )
@@ -163,6 +192,7 @@ async function handleImport(req: NextRequest) {
     inserted,
     updated,
     skipped: entries.length - resolved.length,
+    tasksCreated,
     unmatchedResources: Array.from(unmatchedResources),
     unmatchedProjects: Array.from(unmatchedProjects),
     errors: [],
