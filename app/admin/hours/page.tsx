@@ -95,6 +95,7 @@ function parseClockifyCsv(buffer: ArrayBuffer): ParsedTimeEntry[] {
   for (let r = 1; r < lines.length; r++) {
     const cols = parseQuotedRow(lines[r])
     const projectName = cols[0]?.trim() ?? ''
+    const taskName    = cols[3]?.trim() ?? ''
     const userName    = cols[5]?.trim() ?? ''
     const email       = cols[7]?.trim() ?? ''
     const dateRaw     = cols[10]?.trim() ?? ''
@@ -110,12 +111,14 @@ function parseClockifyCsv(buffer: ArrayBuffer): ParsedTimeEntry[] {
     if (!d || !m || !y) continue
     const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toISOString()
 
-    const key = `${email || userName}|${projectName}|${date}`
+    // Task is part of the grouping key — rows for the same person/project/day
+    // but different tasks must stay separate, not get summed into one entry.
+    const key = `${email || userName}|${projectName}|${taskName}|${date}`
     const existing = agg.get(key)
     if (existing) {
       existing.hours = Math.round((existing.hours + hours) * 100) / 100
     } else {
-      agg.set(key, { resourceName: userName, resourceEmail: email, projectName, date, hours })
+      agg.set(key, { resourceName: userName, resourceEmail: email, projectName, taskName, date, hours })
     }
   }
 
@@ -283,7 +286,7 @@ function ClockifyImport() {
       >
         <Upload className="mx-auto mb-2 text-purple-400" size={28} />
         <p className="text-sm text-gray-600 font-medium">Arrastrá el CSV de Clockify o hacé clic</p>
-        <p className="text-xs text-gray-400 mt-1">Formato: Proyecto, Usuario, Correo electrónico, Fecha de inicio, Duración (decimal)...</p>
+        <p className="text-xs text-gray-400 mt-1">Formato: Proyecto, Tarea, Usuario, Correo electrónico, Fecha de inicio, Duración (decimal)...</p>
         <input ref={fileRef} type="file" accept=".csv" className="hidden"
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       </div>

@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { PROJECT_PALETTE, RESOURCE_PROFILES } from '@/types'
 import { confirmDialog } from '@/lib/confirm-dialog'
+import { toast } from '@/lib/toast'
 import type { Project, Resource, ProjectResourceRate, Task } from '@/types'
 
 const schema = z.object({
@@ -71,13 +72,18 @@ export default function ProjectModal({ open, onClose, editProject }: Props) {
 
   async function addTask() {
     if (!newTaskName.trim() || !editProject) return
-    await fetch('/api/tasks', {
+    const res = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projectId: editProject.id, name: newTaskName.trim() }),
     })
-    setNewTaskName('')
-    qc.invalidateQueries({ queryKey: ['tasks', editProject.id] })
+    if (res.ok) {
+      setNewTaskName('')
+      qc.invalidateQueries({ queryKey: ['tasks', editProject.id] })
+    } else {
+      const body = await res.json().catch(() => ({}))
+      toast({ title: body.error ?? 'No se pudo crear la tarea', variant: 'error' })
+    }
   }
 
   async function toggleTaskActive(task: Task) {

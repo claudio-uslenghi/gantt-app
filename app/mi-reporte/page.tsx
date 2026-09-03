@@ -11,7 +11,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect'
 import StatCard from '@/components/ui/StatCard'
 import EmptyState from '@/components/ui/EmptyState'
 import { SkeletonCard, SkeletonRow } from '@/components/ui/Skeleton'
-import type { Project } from '@/types'
+import type { Project, TaskHoursBreakdown } from '@/types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +86,34 @@ export default function MiReportePage() {
     enabled: !!dateFrom && !!dateTo,
     retry: false,
   })
+
+  const taskParams = new URLSearchParams({
+    view: 'by-task',
+    ...(projectId && { projectId }),
+    ...(dateFrom && { dateFrom }),
+    ...(dateTo && { dateTo }),
+  })
+  const { data: taskBreakdown = [], isFetching: isFetchingTasks } = useQuery<TaskHoursBreakdown[]>({
+    queryKey: ['me-time-entries', 'by-task', projectId, dateFrom, dateTo],
+    queryFn: () => fetchMeJson(`/api/me/time-entries?${taskParams}`),
+    enabled: !!dateFrom && !!dateTo,
+    retry: false,
+  })
+
+  // Group the flat by-task rows into project → tasks[] for rendering —
+  // same shape for mobile and desktop, no separate branch needed here.
+  const taskGroups = useMemo(() => {
+    const byProject = new Map<number, { projectId: number; projectName: string; projectColor: string; total: number; tasks: TaskHoursBreakdown[] }>()
+    for (const row of taskBreakdown) {
+      if (!byProject.has(row.projectId)) {
+        byProject.set(row.projectId, { projectId: row.projectId, projectName: row.projectName, projectColor: row.projectColor, total: 0, tasks: [] })
+      }
+      const group = byProject.get(row.projectId)!
+      group.total += row.hours
+      group.tasks.push(row)
+    }
+    return Array.from(byProject.values()).sort((a, b) => a.projectName.localeCompare(b.projectName))
+  }, [taskBreakdown])
 
   const days = useMemo(() => pivotData?.days ?? [], [pivotData])
   const projectRows = useMemo(() => pivotData?.resources?.[0]?.projects ?? [], [pivotData])
@@ -397,6 +425,47 @@ export default function MiReportePage() {
         </table>
       </div>
       )}
+
+      {/* Horas por tarea — separate section, same data for mobile and
+          desktop (no day-by-day breakdown here, just per-task totals), so
+          it doesn't need its own responsive branch. */}
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <h2 className="text-sm font-semibold text-gray-700">Horas por tarea</h2>
+        </div>
+        {isFetchingTasks && taskGroups.length === 0 && (
+          <div className="divide-y divide-gray-100">
+            <SkeletonRow /><SkeletonRow /><SkeletonRow />
+          </div>
+        )}
+        {!isFetchingTasks && taskGroups.length === 0 && (
+          <EmptyState icon={FolderKanban} message="No hay horas cargadas con los filtros seleccionados" />
+        )}
+        <div className="divide-y divide-gray-100">
+          {taskGroups.map((group) => (
+            <div key={group.projectId}>
+              <div className="flex items-center justify-between px-4 py-2 bg-gray-50 text-sm font-medium">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span style={{
+                    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                    backgroundColor: group.projectColor, flexShrink: 0,
+                  }} />
+                  <span className="truncate">{group.projectName}</span>
+                </span>
+                <span className="text-primary font-semibold tabular-nums shrink-0">{formatHours(group.total)} hs</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {group.tasks.map((t) => (
+                  <div key={t.taskId ?? 'none'} className="flex items-center justify-between px-4 py-2 pl-8 text-sm gap-3">
+                    <span className="text-gray-600 truncate">{t.taskName}</span>
+                    <span className="text-gray-700 tabular-nums shrink-0">{formatHours(t.hours)} hs</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
       </>
       )}
     </div>

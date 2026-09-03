@@ -273,6 +273,8 @@ export default function MisHorasPage() {
         await qc.invalidateQueries({ queryKey: ['tasks'] })
         setPickerTaskId(String(task.id))
         setNewTaskName('')
+      } else {
+        toast({ title: task.error ?? 'No se pudo crear la tarea', variant: 'error' })
       }
     } finally {
       setCreatingTask(false)

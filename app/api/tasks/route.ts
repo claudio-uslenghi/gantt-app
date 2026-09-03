@@ -29,13 +29,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Faltan campos requeridos' }, { status: 400 })
     }
 
+    const trimmed = name.trim()
+    // Case-insensitive check — the DB constraint (@@unique([projectId,
+    // name])) only catches exact duplicates, not "Testing" vs "testing".
+    const existing = await prisma.task.findMany({ where: { projectId: Number(projectId) }, select: { name: true } })
+    if (existing.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      return NextResponse.json({ error: `Ya existe una tarea llamada "${trimmed}" en este proyecto` }, { status: 409 })
+    }
+
     const task = await prisma.task.create({
-      data: { projectId: Number(projectId), name: name.trim() },
+      data: { projectId: Number(projectId), name: trimmed },
     })
     return NextResponse.json(task, { status: 201 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error'
     if (msg === 'Forbidden') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+      return NextResponse.json({ error: 'Ya existe una tarea con ese nombre en este proyecto' }, { status: 409 })
+    }
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

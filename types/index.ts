@@ -121,6 +121,7 @@ export interface ImportTimeEntriesResult {
   inserted: number
   updated: number
   skipped: number
+  tasksCreated: number
   unmatchedResources: string[]
   unmatchedProjects: string[]
   errors: string[]
@@ -130,9 +131,22 @@ export interface ParsedTimeEntry {
   resourceName: string
   resourceEmail?: string   // optional: used by Clockify import for email-based matching
   projectName: string
+  taskName?: string        // optional: Clockify's "Tarea" column — empty/absent means no task (T&M-style)
   date: string
   hours: number
   entryType?: string       // "regular" | "extra" — optional, defaults to "regular"
+}
+
+// One row per (project, task) with hours > 0 in the filtered range — powers
+// Mi Reporte's "Horas por tarea" table. taskId/taskName are null/"Sin tarea"
+// for T&M-style entries that were never tagged with a task.
+export interface TaskHoursBreakdown {
+  projectId: number
+  projectName: string
+  projectColor: string
+  taskId: number | null
+  taskName: string
+  hours: number
 }
 
 export type ProjectStatus = 'En ejecución' | 'Próximo' | 'En planificación' | 'Continuo' | 'Finalizado' | 'No Facturable'
