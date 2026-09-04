@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const resourceId = searchParams.get('resourceId')
   const projectId = searchParams.get('projectId')
+  const taskId = searchParams.get('taskId')
   const dateFrom = searchParams.get('dateFrom')
   const dateTo = searchParams.get('dateTo')
   const month = searchParams.get('month') // YYYY-MM
@@ -56,6 +57,7 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = {}
   if (resourceId) where.resourceId = parseInt(resourceId)
   if (projectId) where.projectId = parseInt(projectId)
+  if (taskId) where.taskId = parseInt(taskId)
   if (from || to) {
     where.date = {
       ...(from ? { gte: from } : {}),
@@ -132,6 +134,40 @@ export async function GET(req: NextRequest) {
   if (view === 'pivot') {
     const pivot = await buildTimeEntriesPivot(where, { from, to })
     return NextResponse.json(pivot)
+  }
+
+  // Hours-by-task breakdown for Reporte Diario — admin equivalent of the
+  // `by-task` view in /api/me/time-entries. Grouped by taskId only (not by
+  // resource), same as Mi Reporte — shown only once a single project is
+  // already selected via the existing Proyecto filter, so this stays a flat
+  // per-task list rather than needing a resource dimension.
+  if (view === 'by-task') {
+    const grouped = await prisma.timeEntry.groupBy({
+      by: ['projectId', 'taskId'],
+      where,
+      _sum: { hours: true },
+    })
+    const projectIds = Array.from(new Set(grouped.map((g) => g.projectId)))
+    const taskIds = Array.from(new Set(grouped.map((g) => g.taskId).filter((id): id is number => id != null)))
+    const [projects, tasks] = await Promise.all([
+      prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, name: true, color: true } }),
+      prisma.task.findMany({ where: { id: { in: taskIds } }, select: { id: true, name: true } }),
+    ])
+    const projectById = new Map(projects.map((p) => [p.id, p]))
+    const taskById = new Map(tasks.map((t) => [t.id, t]))
+
+    const byTask = grouped
+      .map((g) => ({
+        projectId: g.projectId,
+        projectName: projectById.get(g.projectId)?.name ?? `Proyecto #${g.projectId}`,
+        projectColor: projectById.get(g.projectId)?.color ?? '#9ca3af',
+        taskId: g.taskId,
+        taskName: g.taskId != null ? taskById.get(g.taskId)?.name ?? `Tarea #${g.taskId}` : 'Sin tarea',
+        hours: g._sum.hours ?? 0,
+      }))
+      .sort((a, b) => a.projectName.localeCompare(b.projectName) || b.hours - a.hours)
+
+    return NextResponse.json(byTask)
   }
 
   // Default: raw with pagination + dynamic sort

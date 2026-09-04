@@ -11,7 +11,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect'
 import StatCard from '@/components/ui/StatCard'
 import EmptyState from '@/components/ui/EmptyState'
 import { SkeletonCard, SkeletonRow } from '@/components/ui/Skeleton'
-import type { Project, TaskHoursBreakdown } from '@/types'
+import type { Project, Task, TaskHoursBreakdown } from '@/types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +61,7 @@ export default function MiReportePage() {
   const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
 
   const [projectId, setProjectId] = useState('')
+  const [taskId, setTaskId] = useState('')
   const [dateFrom, setDateFrom] = useState(`${y}-${m}-01`)
   const [dateTo, setDateTo] = useState(`${y}-${m}-${String(lastDay).padStart(2, '0')}`)
 
@@ -73,15 +74,33 @@ export default function MiReportePage() {
     [projects]
   )
 
+  // Tasks are scoped to a project, so the Tarea filter only makes sense
+  // (and only fetches) once a Proyecto is chosen.
+  const { data: projectTasks } = useQuery<Task[]>({
+    queryKey: ['tasks', projectId],
+    queryFn: () => fetch(`/api/tasks?projectId=${projectId}`).then((r) => r.json()),
+    enabled: !!projectId,
+  })
+  const taskOptions = useMemo(
+    () => (projectTasks ?? []).filter((t) => t.active).map((t) => ({ value: String(t.id), label: t.name })).sort((a, b) => a.label.localeCompare(b.label)),
+    [projectTasks]
+  )
+
+  function handleProjectChange(value: string) {
+    setProjectId(value)
+    setTaskId('') // a task from the previous project wouldn't be valid here
+  }
+
   const params = new URLSearchParams({
     view: 'pivot',
     ...(projectId && { projectId }),
+    ...(taskId && { taskId }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
   })
 
   const { data: pivotData, isFetching, error } = useQuery<PivotData>({
-    queryKey: ['me-time-entries', 'pivot', projectId, dateFrom, dateTo],
+    queryKey: ['me-time-entries', 'pivot', projectId, taskId, dateFrom, dateTo],
     queryFn: () => fetchMeJson(`/api/me/time-entries?${params}`),
     enabled: !!dateFrom && !!dateTo,
     retry: false,
@@ -90,11 +109,12 @@ export default function MiReportePage() {
   const taskParams = new URLSearchParams({
     view: 'by-task',
     ...(projectId && { projectId }),
+    ...(taskId && { taskId }),
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
   })
   const { data: taskBreakdown = [], isFetching: isFetchingTasks } = useQuery<TaskHoursBreakdown[]>({
-    queryKey: ['me-time-entries', 'by-task', projectId, dateFrom, dateTo],
+    queryKey: ['me-time-entries', 'by-task', projectId, taskId, dateFrom, dateTo],
     queryFn: () => fetchMeJson(`/api/me/time-entries?${taskParams}`),
     enabled: !!dateFrom && !!dateTo,
     retry: false,
@@ -156,6 +176,7 @@ export default function MiReportePage() {
 
   const resetFilters = () => {
     setProjectId('')
+    setTaskId('')
     setDateFrom(`${y}-${m}-01`)
     setDateTo(`${y}-${m}-${String(lastDay).padStart(2, '0')}`)
   }
@@ -184,9 +205,20 @@ export default function MiReportePage() {
           <label className="text-xs text-gray-500 font-medium">Proyecto</label>
           <SearchableSelect
             value={projectId}
-            onChange={setProjectId}
+            onChange={handleProjectChange}
             options={projectOptions}
             placeholder="Todos los proyectos"
+            className="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[160px]"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500 font-medium">Tarea</label>
+          <SearchableSelect
+            value={taskId}
+            onChange={setTaskId}
+            options={taskOptions}
+            placeholder={projectId ? 'Todas las tareas' : 'Elegí un proyecto primero'}
+            disabled={!projectId}
             className="border border-gray-300 rounded px-2 py-1.5 text-sm min-w-[160px]"
           />
         </div>
