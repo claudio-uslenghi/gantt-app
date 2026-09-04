@@ -1086,3 +1086,79 @@ Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual con 
 ## Open Questions
 
 - ¿Borro las 13 tareas ya cargadas hoy para arrancar limpio, o las dejo? (si el nombre coincide con lo que trae Clockify se van a reusar solas; si no, van a convivir con las nuevas sin romper nada — no es necesario borrarlas para que esto funcione).
+
+---
+
+# Spec: Filtro por tarea (Mi Reporte), navegación por mes y desglose por tarea (Reporte Diario)
+
+## Objective
+
+Cuatro pedidos relacionados:
+
+1. **Investigar**: la tarea "Diseño Checkout y Stripe MX" no aparece en el picker de Mis Horas.
+2. Mi Reporte: agregar un filtro por Tarea, justo después del de Proyecto.
+3. Reporte Diario (admin): agregar navegación por mes (flechas u otra forma), para no depender solo de elegir fecha Desde/Hasta a mano.
+4. Reporte Diario: mostrar el desglose de horas por tarea cuando se elige un proyecto, igual que en Mi Reporte.
+
+**Éxito** = queda claro por qué la tarea del punto 1 no aparecía (no era un bug); Mi Reporte permite filtrar por tarea dentro de un proyecto; Reporte Diario permite moverse entre meses con un clic; Reporte Diario muestra el desglose por tarea al elegir un proyecto — todo sin tocar `lib/time-entries-pivot.ts` (compartida entre las dos pantallas de reporte) ni la lógica de Gantt/Control de Horas.
+
+## Hallazgos clave
+
+- **Punto 1, resuelto sin cambio de código**: se consultó la base real — la tarea "Diseño Checkout y Stripe MX" (id 25, proyecto "MOB Mantenimiento") existe una sola vez, activa, sin duplicados ni diferencias de espacios/mayúsculas. No aparece en el picker de "+ Seleccionar proyecto" porque **ya es una fila cargada esa semana** (se ve en la propia captura del usuario, con 3 horas el lunes) — `pickerTaskOptions` excluye a propósito las tareas que ya son una fila, para no permitir agregar una fila duplicada. Es el comportamiento esperado. No se toca código para esto.
+- **Reporte Diario hoy** (`app/admin/daily-report/page.tsx`) filtra por Persona y Proyecto (`SearchableSelect`, ya con búsqueda/orden alfabético de un spec anterior) y por un par Desde/Hasta de `<input type="date">` — sin atajos de mes, sin flechas. Pega a `/api/time-entries?view=pivot` (ruta admin, sin scope a un solo recurso), que ya usa `buildTimeEntriesPivot` — **la misma función que usa Mi Reporte**.
+- **`buildTimeEntriesPivot` es agnóstica al filtro que recibe**: el `where: Prisma.TimeEntryWhereInput` se pasa tal cual a Prisma, sin que la función lea/hardcodee qué campos tiene — solo usa `range.from/to` para armar la lista de columnas de día. Esto confirma que se puede agregar `where.taskId = X` en el caller (tanto en `/api/time-entries` como en `/api/me/time-entries`) **sin tocar `lib/time-entries-pivot.ts` para nada** — ninguna de las 2 pantallas de reporte ni `admin/daily-report` se ven afectadas si no mandan ese filtro.
+- **No existe hoy ningún endpoint admin de "horas por tarea"** — el único precedente es el `view=by-task` que se agregó a `/api/me/time-entries` en el spec anterior (agrupa por `taskId`, vía `groupBy`). Se replica el mismo patrón en `/api/time-entries` (admin), agrupando también solo por `taskId` (no por recurso) — coherente con "igual que en Mi Reporte", que tampoco desglosa por persona.
+- **La tabla de Reporte Diario no tiene ninguna interacción de "click en una fila para ver más"** — cada fila de proyecto ya está bajo un encabezado de recurso (agrupación de 2 niveles: recurso → proyecto), a diferencia de Mi Reporte que es una lista plana de proyectos. El combo de Proyecto ya existente es el disparador más simple y consistente: al elegir un proyecto puntual (no "Todos los proyectos"), aparece la sección nueva debajo de la tabla — mismo patrón que ya construimos en Mi Reporte, sin inventar una interacción de click-en-fila nueva.
+
+## Decisiones confirmadas
+
+1. **Punto 1**: cerrado, sin cambios de código — documentado arriba.
+2. **Mi Reporte — filtro por Tarea**: nuevo `SearchableSelect` "Tarea" en la barra de filtros, inmediatamente después de "Proyecto". Opciones desde `GET /api/tasks?projectId=X` — solo se puebla/habilita cuando hay un proyecto elegido (las tareas están scopeadas a un proyecto, no tiene sentido elegir tarea sin proyecto primero). Al elegir una tarea, se agrega `taskId` a los params de `view=pivot` y `view=by-task` — la tabla de días y el total de esa fila pasan a reflejar solo esa tarea (la función de pivot no cambia, solo recibe un `where` más angosto).
+3. **`/api/me/time-entries` y `/api/time-entries`**: ambos GET aceptan un nuevo query param `taskId` opcional, que se agrega al `where` (`where.taskId = Number(taskId)`) antes de pasarlo a `buildTimeEntriesPivot` o al `groupBy` de `by-task`.
+4. **Reporte Diario — navegación por mes**: flechas `←`/`→` (mismo componente visual y mismos `aria-label` "Mes anterior"/"Mes siguiente" que ya se usan en Mis Horas para semana), que desplazan el mes actual de `dateFrom` en ±1 y recalculan `dateFrom`/`dateTo` a los límites de ese mes — mismo cálculo que ya usa `selectMonth()` en Mi Reporte, aplicado de forma relativa en vez de a "este mes"/"mes anterior" fijos, para poder navegar indefinidamente hacia atrás o adelante. Los campos Desde/Hasta existentes **se mantienen** para rangos custom (no se reemplazan) — igual que se decidió para Mi Reporte.
+5. **Reporte Diario — desglose por tarea**: nueva sección "Horas por tarea" debajo de la tabla pivot, **visible solo cuando hay un proyecto elegido** (no con "Todos los proyectos", para no traer una lista enorme de tareas de todos los proyectos mezcladas). Nuevo `view=by-task` en `/api/time-entries` (admin), agrupado por `taskId` únicamente — no por recurso, igual que Mi Reporte. Respeta los demás filtros ya activos (Persona, fechas) si están puestos.
+6. **No se toca** `lib/time-entries-pivot.ts`, ni la agrupación recurso→proyecto ya existente en Reporte Diario, ni Gantt, ni Control de Horas.
+
+## Tech Stack
+
+Sin librerías nuevas.
+
+## Project Structure
+
+```
+app/api/me/time-entries/route.ts    -> GET: +taskId opcional en el where (pivot y by-task)
+app/api/time-entries/route.ts       -> GET: +taskId opcional en el where (pivot); +nuevo view=by-task (agrupado por taskId)
+app/mi-reporte/page.tsx             -> +SearchableSelect "Tarea" tras "Proyecto"
+app/admin/daily-report/page.tsx     -> +flechas de navegación por mes; +sección "Horas por tarea" cuando hay proyecto elegido
+types/index.ts                      -> sin cambios (TaskHoursBreakdown ya sirve para ambos endpoints)
+```
+
+## Code Style
+
+Mismo patrón ya establecido: `SearchableSelect` para el nuevo filtro de tarea (igual que Proyecto/Persona), flechas con `aria-label` explícito (mismo texto que Mis Horas), la sección "Horas por tarea" reutiliza el mismo markup/estilo que ya se construyó en `app/mi-reporte/page.tsx` (encabezado de proyecto + subfilas de tarea, sin necesitar rama mobile/desktop separada).
+
+## Testing Strategy
+
+Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual con datos de prueba descartables:
+- Mi Reporte: elegir un proyecto, luego una tarea → la tabla y el total reflejan solo esa tarea.
+- Reporte Diario: flechas de mes navegan correctamente hacia atrás y adelante, Desde/Hasta se actualizan y la tabla recarga.
+- Reporte Diario: elegir un proyecto muestra "Horas por tarea" con los valores correctos; "Todos los proyectos" no la muestra.
+- `git diff --stat` confirma cero cambios en `lib/time-entries-pivot.ts`, Gantt, Control de Horas.
+
+## Boundaries
+
+- **Always**: mantener `buildTimeEntriesPivot` sin cambios — el filtro de tarea se resuelve enteramente en el `where` que arma cada caller.
+- **Ask first**: extender el desglose por tarea de Reporte Diario para que también discrimine por persona (fuera de alcance de este spec, que replica el comportamiento de Mi Reporte tal cual).
+- **Never**: tocar la agrupación recurso→proyecto ya existente en Reporte Diario; tocar Gantt o Control de Horas.
+
+## Success Criteria
+
+1. Mi Reporte: filtro de Tarea funcional, aparece tras Proyecto, solo habilitado con un proyecto elegido.
+2. Reporte Diario: flechas de mes navegan correctamente; Desde/Hasta siguen funcionando para rangos custom.
+3. Reporte Diario: "Horas por tarea" aparece al elegir un proyecto, con los valores correctos.
+4. `git diff --stat` confirma cero cambios en `lib/time-entries-pivot.ts`, Gantt, Control de Horas.
+5. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+
+## Open Questions
+
+Ninguna.

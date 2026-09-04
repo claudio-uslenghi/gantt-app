@@ -2,9 +2,14 @@
 
 import { useMemo, useState, Fragment } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download } from 'lucide-react'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { Download, FolderKanban } from 'lucide-react'
 import { useIsMobile } from '@/lib/use-is-mobile'
 import SearchableSelect from '@/components/ui/SearchableSelect'
+import EmptyState from '@/components/ui/EmptyState'
+import { SkeletonRow } from '@/components/ui/Skeleton'
+import type { TaskHoursBreakdown } from '@/types'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -87,9 +92,40 @@ export default function DailyReportPage() {
     enabled: !!dateFrom && !!dateTo,
   })
 
+  // "Horas por tarea" — only once a single project is chosen (same trigger
+  // Mi Reporte uses), respects whichever other filters are already active.
+  const taskParams = new URLSearchParams({
+    view: 'by-task',
+    ...(resourceId && { resourceId }),
+    ...(projectId  && { projectId }),
+    ...(dateFrom   && { dateFrom }),
+    ...(dateTo     && { dateTo }),
+  })
+  const { data: taskBreakdown = [], isFetching: isFetchingTasks } = useQuery<TaskHoursBreakdown[]>({
+    queryKey: ['time-entries', 'by-task', resourceId, projectId, dateFrom, dateTo],
+    queryFn: () => fetch(`/api/time-entries?${taskParams}`).then((r) => r.json()),
+    enabled: !!projectId && !!dateFrom && !!dateTo,
+  })
+
   const days            = pivotData?.days ?? []
   const pivotResources  = pivotData?.resources ?? []
   const grandTotal      = pivotResources.reduce((s, r) => s + r.total, 0)
+
+  // Same grouping as Mi Reporte's "Horas por tarea" — flat by-task rows
+  // regrouped under their project for display (only one project here since
+  // this section is gated on a single Proyecto being selected).
+  const taskGroups = useMemo(() => {
+    const byProject = new Map<number, { projectId: number; projectName: string; projectColor: string; total: number; tasks: TaskHoursBreakdown[] }>()
+    for (const row of taskBreakdown) {
+      if (!byProject.has(row.projectId)) {
+        byProject.set(row.projectId, { projectId: row.projectId, projectName: row.projectName, projectColor: row.projectColor, total: 0, tasks: [] })
+      }
+      const group = byProject.get(row.projectId)!
+      group.total += row.hours
+      group.tasks.push(row)
+    }
+    return Array.from(byProject.values()).sort((a, b) => a.projectName.localeCompare(b.projectName))
+  }, [taskBreakdown])
 
   const CELL_W  = isMobile ? 30 : 34
   const NAME_W  = isMobile ? 140 : 220
@@ -107,6 +143,20 @@ export default function DailyReportPage() {
     setDateFrom(`${y}-${m}-01`)
     setDateTo(`${y}-${m}-${String(lastDay).padStart(2, '0')}`)
   }
+
+  // Arrows to move between months without touching the calendar pickers —
+  // shifts whichever month dateFrom currently falls in, so it composes with
+  // a manually-edited Desde/Hasta instead of needing its own separate state.
+  const shiftMonth = (delta: number) => {
+    const current = new Date(dateFrom + 'T12:00:00Z')
+    const target = new Date(current.getUTCFullYear(), current.getUTCMonth() + delta, 1)
+    const ty = target.getFullYear()
+    const tm = String(target.getMonth() + 1).padStart(2, '0')
+    const tLastDay = new Date(ty, target.getMonth() + 1, 0).getDate()
+    setDateFrom(`${ty}-${tm}-01`)
+    setDateTo(`${ty}-${tm}-${String(tLastDay).padStart(2, '0')}`)
+  }
+  const currentMonthLabel = format(new Date(dateFrom + 'T12:00:00Z'), 'MMMM yyyy', { locale: es })
 
   function exportCsv() {
     // Collect all unique projects across all resources (preserving first-seen order)
@@ -162,6 +212,29 @@ export default function DailyReportPage() {
         <p className="text-sm text-gray-500 mt-1">
           Vista pivot de horas por recurso y proyecto agrupadas por día
         </p>
+      </div>
+
+      {/* Month nav — moves Desde/Hasta by a full calendar month at a time,
+          same aria-label convention as the week nav in Mis Horas. The
+          fields below still work for any custom range. */}
+      <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 flex flex-wrap items-center gap-2 sm:gap-3">
+        <button
+          onClick={() => shiftMonth(-1)}
+          aria-label="Mes anterior"
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm hover:bg-gray-50"
+        >
+          ←
+        </button>
+        <span className="text-sm text-gray-600 flex-1 text-center sm:flex-initial capitalize">
+          {currentMonthLabel}
+        </span>
+        <button
+          onClick={() => shiftMonth(1)}
+          aria-label="Mes siguiente"
+          className="border border-gray-300 rounded px-2 py-1.5 text-sm hover:bg-gray-50"
+        >
+          →
+        </button>
       </div>
 
       {/* Filters */}
@@ -382,6 +455,49 @@ export default function DailyReportPage() {
           )}
         </table>
       </div>
+
+      {/* Horas por tarea — same section/markup as Mi Reporte, gated on a
+          single project being selected (otherwise this would mix tasks
+          from every project across every person). */}
+      {projectId && (
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <h2 className="text-sm font-semibold text-gray-700">Horas por tarea</h2>
+          </div>
+          {isFetchingTasks && taskGroups.length === 0 && (
+            <div className="divide-y divide-gray-100">
+              <SkeletonRow /><SkeletonRow /><SkeletonRow />
+            </div>
+          )}
+          {!isFetchingTasks && taskGroups.length === 0 && (
+            <EmptyState icon={FolderKanban} message="No hay horas cargadas con los filtros seleccionados" />
+          )}
+          <div className="divide-y divide-gray-100">
+            {taskGroups.map((group) => (
+              <div key={group.projectId}>
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-50 text-sm font-medium">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span style={{
+                      display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                      backgroundColor: group.projectColor, flexShrink: 0,
+                    }} />
+                    <span className="truncate">{group.projectName}</span>
+                  </span>
+                  <span className="text-[#0170B9] font-semibold tabular-nums shrink-0">{formatHours(group.total)} hs</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {group.tasks.map((t) => (
+                    <div key={t.taskId ?? 'none'} className="flex items-center justify-between px-4 py-2 pl-8 text-sm gap-3">
+                      <span className="text-gray-600 truncate">{t.taskName}</span>
+                      <span className="text-gray-700 tabular-nums shrink-0">{formatHours(t.hours)} hs</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

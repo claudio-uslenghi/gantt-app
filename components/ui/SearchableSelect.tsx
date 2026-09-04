@@ -14,6 +14,7 @@ interface Props {
   options: SearchableSelectOption[]
   placeholder?: string
   className?: string
+  disabled?: boolean
 }
 
 interface Position {
@@ -32,6 +33,7 @@ export default function SearchableSelect({
   options,
   placeholder = 'Seleccionar...',
   className = 'border border-gray-300 rounded px-2 py-1.5 text-sm',
+  disabled = false,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -132,7 +134,8 @@ export default function SearchableSelect({
         onChange={(e) => { setQuery(e.target.value); setOpen(true); setHighlightIndex(0) }}
         onKeyDown={handleKeyDown}
         autoComplete="off"
-        className={className}
+        disabled={disabled}
+        className={`${className} disabled:opacity-60 disabled:cursor-not-allowed`}
       />
       {open && position && createPortal(
         <div

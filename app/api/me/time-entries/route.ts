@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = req.nextUrl
     const projectId = searchParams.get('projectId')
+    const taskId = searchParams.get('taskId')
     const dateFrom = searchParams.get('dateFrom')
     const dateTo = searchParams.get('dateTo')
     const month = searchParams.get('month') // YYYY-MM
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.TimeEntryWhereInput = { resourceId: resource.id }
     if (projectId) where.projectId = Number(projectId)
+    if (taskId) where.taskId = Number(taskId)
     if (from || to) {
       where.date = {
         ...(from ? { gte: from } : {}),
