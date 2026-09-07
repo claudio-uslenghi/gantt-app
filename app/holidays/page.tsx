@@ -5,11 +5,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { eachDayOfInterval, isWeekend, parseISO } from 'date-fns'
 import { formatDate } from '@/lib/date-utils'
-import { Plus, Trash2, Upload, Download, Filter, Pencil } from 'lucide-react'
+import { Plus, Trash2, Upload, Download, Filter, Pencil, Search } from 'lucide-react'
 import HolidayModal from '@/components/modals/HolidayModal'
 import VacationModal from '@/components/modals/VacationModal'
 import VacationCsvImportModal from '@/components/modals/VacationCsvImportModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
+import Pagination from '@/components/ui/Pagination'
 import type { Resource, Vacation, CountryHoliday } from '@/types'
 import { FLAG_BY_NAME } from '@/lib/countries'
 import { confirmDialog } from '@/lib/confirm-dialog'
@@ -36,6 +37,13 @@ export default function HolidaysPage() {
   const [showVacationCsvModal, setShowVacationCsvModal] = useState(false)
   const [showCsvModal, setShowCsvModal] = useState(false)
   const [filterCountry, setFilterCountry] = useState<string>('')
+
+  const [vacationSearch, setVacationSearch] = useState('')
+  const [vacationPage, setVacationPage] = useState(1)
+  const [vacationPageSize, setVacationPageSize] = useState(10)
+
+  const [holidayPage, setHolidayPage] = useState(1)
+  const [holidayPageSize, setHolidayPageSize] = useState(10)
 
   const { data: myResource } = useQuery<Resource>({
     queryKey: ['me-resource'],
@@ -81,17 +89,40 @@ export default function HolidaysPage() {
     window.open(`/api/country-holidays/export${params}`, '_blank')
   }
 
+  // Filter vacations by resource name/email, then paginate client-side.
+  const filteredVacations = vacationSearch.trim()
+    ? vacations.filter((v) => {
+        const q = vacationSearch.trim().toLowerCase()
+        return v.resource?.name.toLowerCase().includes(q) || v.resource?.email?.toLowerCase().includes(q)
+      })
+    : vacations
+  const vacationTotalPages = Math.max(1, Math.ceil(filteredVacations.length / vacationPageSize))
+  const vacationPageClamped = Math.min(vacationPage, vacationTotalPages)
+  const pagedVacations = filteredVacations.slice(
+    (vacationPageClamped - 1) * vacationPageSize,
+    vacationPageClamped * vacationPageSize
+  )
+
   // Derive countries dynamically from data (sorted alphabetically)
   const availableCountries = Array.from(new Set(countryHolidays.map((h) => h.country))).sort()
 
-  // Filter and group by country
+  // Filter by country, paginate the flat list, then group only the current
+  // page's slice — a page can start mid-country, same as any flat pagination
+  // over grouped data.
   const filtered = filterCountry
     ? countryHolidays.filter((h) => h.country === filterCountry)
     : countryHolidays
 
-  const grouped = availableCountries.reduce<Record<string, CountryHoliday[]>>((acc, c) => {
-    const items = filtered.filter((h) => h.country === c)
-    if (items.length) acc[c] = items
+  const holidayTotalPages = Math.max(1, Math.ceil(filtered.length / holidayPageSize))
+  const holidayPageClamped = Math.min(holidayPage, holidayTotalPages)
+  const pagedFiltered = filtered.slice(
+    (holidayPageClamped - 1) * holidayPageSize,
+    holidayPageClamped * holidayPageSize
+  )
+
+  const grouped = pagedFiltered.reduce<Record<string, CountryHoliday[]>>((acc, h) => {
+    if (!acc[h.country]) acc[h.country] = []
+    acc[h.country].push(h)
     return acc
   }, {})
 
@@ -104,6 +135,16 @@ export default function HolidaysPage() {
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-700">Vacaciones programadas</h2>
           <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">
+              <Search size={13} className="text-gray-400" />
+              <input
+                type="text"
+                value={vacationSearch}
+                onChange={(e) => { setVacationSearch(e.target.value); setVacationPage(1) }}
+                placeholder="Buscar por nombre o email..."
+                className="text-sm text-gray-700 bg-transparent outline-none w-44"
+              />
+            </div>
             {isAdmin && (
               <button
                 onClick={() => setShowVacationCsvModal(true)}
@@ -137,9 +178,13 @@ export default function HolidaysPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {vacations.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-6 text-gray-400">Sin vacaciones registradas</td></tr>
-              ) : vacations.map((v) => (
+              {filteredVacations.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-6 text-gray-400">
+                    {vacations.length === 0 ? 'Sin vacaciones registradas' : 'Sin resultados para la búsqueda'}
+                  </td>
+                </tr>
+              ) : pagedVacations.map((v) => (
                 <tr key={v.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -164,6 +209,13 @@ export default function HolidaysPage() {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={vacationPageClamped}
+            pageSize={vacationPageSize}
+            totalItems={filteredVacations.length}
+            onPageChange={setVacationPage}
+            onPageSizeChange={(size) => { setVacationPageSize(size); setVacationPage(1) }}
+          />
         </div>
       </section>
 
@@ -177,7 +229,7 @@ export default function HolidaysPage() {
               <Filter size={13} className="text-gray-400" />
               <select
                 value={filterCountry}
-                onChange={(e) => setFilterCountry(e.target.value)}
+                onChange={(e) => { setFilterCountry(e.target.value); setHolidayPage(1) }}
                 className="text-sm text-gray-700 bg-transparent outline-none"
               >
                 <option value="">Todos los países</option>
@@ -269,6 +321,13 @@ export default function HolidaysPage() {
               </tbody>
             </table>
           )}
+          <Pagination
+            page={holidayPageClamped}
+            pageSize={holidayPageSize}
+            totalItems={filtered.length}
+            onPageChange={setHolidayPage}
+            onPageSizeChange={(size) => { setHolidayPageSize(size); setHolidayPage(1) }}
+          />
         </div>
 
         <p className="text-xs text-gray-400 mt-2">
