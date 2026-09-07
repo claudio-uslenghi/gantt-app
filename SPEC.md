@@ -1162,3 +1162,72 @@ Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual con 
 ## Open Questions
 
 Ninguna.
+
+---
+
+# Spec: Import de Vacaciones desde CSV (Vacaciones programadas)
+
+## Objective
+
+La sección "Vacaciones programadas" de `/holidays` hoy solo permite cargar vacaciones una por una vía `VacationModal`. El usuario tiene un CSV histórico ("Registro Inasistencias/Vacaciones") exportado de un Google Form, con columnas `Timestamp, Email Address, Starting, Finishing, Half Day or Full Day?, Type of Time off`, y quiere poder importarlo masivamente, igual que ya existe para Feriados por País.
+
+**Éxito** = un admin puede subir el CSV, ver un preview con las filas de 2026 ya resueltas contra un `Resource` (match directo por email o heurístico por nombre), asignar manualmente el recurso a las filas sin match automático (o descartarlas), corregir/descartar filas con datos inválidos, y confirmar la importación — creando registros `Vacation` con tipo y medio-día, sin duplicar filas ya importadas antes.
+
+## Hallazgos clave de la exploración (macheo CSV ↔ DB)
+
+- **Cobertura de `Resource.email` muy baja**: solo 6 de 29 recursos tienen email cargado. Match exacto por email por sí solo deja afuera a la mayoría de las personas del CSV.
+- **Heurístico nombre↔email viable como fallback**: varios recursos sin email están nombrados igual al local-part del email (`fwade`, `ifrancisco`) o siguen el patrón "inicial del nombre + apellido" (`aragih@zircon.tech` → "Abdulelah Ragih", `ppietraroia@zircon.tech` → "Pablo Pietraroia", `prappalini@zircon.tech` → "PABLO RAPPALINI", etc.).
+- **Alcance acordado con el usuario: solo filas con `Starting` en 2026.** Sobre esas 57 filas: 24 matchean directo por email, 13 más por heurístico (37/57 total), y **20 filas de 6 personas quedan sin candidato** (`mmartin@zircon.tech` sola aporta 11 de esas 20; el resto: `mcasal@zircon.tech`, `matiascasalh@gmail.com`, `faguero@zircon.tech`, `kleon@zircon.tech`, `oantilef@zircon.tech`). Estas personas no tienen un `Resource` reconocible en el sistema hoy (o el nombre no se parece lo suficiente al email).
+- **Una fila con dato inválido**: `faguero@zircon.tech`, `Starting=9/24/2026`, `Finishing=9/3/2026` (fin antes que inicio) — se excluye del import y se reporta como error, sin invertir fechas.
+- **El modelo `Vacation` no tiene `type` ni `halfDay`** — solo `startDate`, `endDate`, `notes` (texto libre). El CSV trae "Type of Time off" (`Vacation / Day Off` | `Sick Day` | `Birthday`) y "Half Day or Full Day?" que no tienen dónde guardarse hoy sin cambiar el schema.
+- **`luciana.diniz@riskified.com` y `ldiniz@zircon.tech` son la misma persona** (Luciana Diniz) con dos direcciones distintas — ambas resuelven al mismo `Resource` vía heurístico.
+
+## Decisiones confirmadas con el usuario
+
+1. **Alcance**: solo importar filas cuyo `Starting` caiga en el año 2026 (ignorar 2024/2025 del CSV histórico).
+2. **Matching**: match directo por email exacto, con fallback heurístico (nombre igual al local-part, o patrón inicial+apellido contra `Resource.name`, sin distinguir mayúsculas/acentos). Las filas sin match automático se muestran en el preview con un `SearchableSelect` para asignar manualmente el recurso, o un toggle para descartarlas — no bloquean el resto del import.
+3. **Schema**: agregar `type: String` y `halfDay: Boolean @default(false)` al modelo `Vacation` (migración chica, sin tocar `startDate`/`endDate`/`notes`/`resourceId` existentes). `type` guarda el valor crudo del CSV (`Vacation / Day Off`, `Sick Day`, `Birthday`); default `'Vacation / Day Off'` para vacaciones cargadas manualmente vía `VacationModal` (no rompe el flujo existente).
+4. **Backfill de email**: cuando una fila se resuelve por heurístico (auto o asignación manual en el preview) y el `Resource` no tiene `email` cargado, se completa `Resource.email` con el email del CSV al confirmar el import. Nunca sobreescribe un email ya existente, aunque difiera del CSV (se deja tal cual, sin error bloqueante).
+5. **Filas con fecha inválida** (`Finishing < Starting`): se excluyen del import y se listan como error en el resultado — no se intenta invertir fechas ni adivinar.
+6. **Idempotencia**: antes de crear, se chequea si ya existe un `Vacation` con el mismo `(resourceId, startDate, endDate)` — si existe, se saltea y se cuenta como "ya existía" en vez de duplicar. No es una constraint de DB (una persona podría legítimamente cargar dos rangos idénticos en teoría), es un chequeo a nivel aplicación, igual que el patrón ya usado en `PUT /api/me/time-entries`.
+
+## Tech Stack
+
+Next.js 14 App Router, TypeScript, Prisma + Turso, TanStack Query. Reutiliza el patrón de `CsvImportModal` (parseo client-side con detección BOM/encoding, preview antes de confirmar, POST a un endpoint de import) y el patrón de resolución de nombres del import de tareas de Clockify (normalización case-insensitive).
+
+## Project Structure
+
+- `prisma/schema.prisma` — agregar `type` y `halfDay` a `Vacation`.
+- `app/api/vacations/import/route.ts` (nuevo) — recibe filas ya parseadas + resueltas por el cliente (`{ resourceId, startDate, endDate, halfDay, type }[]`), aplica idempotencia, crea los `Vacation`, hace el backfill de `Resource.email` cuando corresponda.
+- `components/modals/VacationCsvImportModal.tsx` (nuevo, separado de `CsvImportModal` porque el formato de columnas y la lógica de matching son completamente distintos) — parseo del CSV, filtro a filas 2026, resolución de matching (directo + heurístico), UI de preview con asignación manual/descarte por fila sin match, y de filas con error (fecha inválida).
+- `app/holidays/page.tsx` — nuevo botón "Importar CSV" en la sección "Vacaciones programadas" (mismo estilo que el ya existente en "Feriados por País"), abre `VacationCsvImportModal`.
+- `types/index.ts` — extender el tipo `Vacation` con `type: string` y `halfDay: boolean`.
+
+## Code Style
+
+Mismo patrón visual y de estados (loading/error/preview/result) que `CsvImportModal`. Función de normalización de nombres (para el heurístico) como helper puro y testeable, sin dependencias de red, ubicada junto al nuevo modal o en `lib/`.
+
+## Testing Strategy
+
+Sin suite automatizada — `npx tsc --noEmit` + `npm run build` + QA manual con datos de prueba descartables:
+- Importar un CSV de prueba con: una fila de match directo, una de match heurístico, una sin match (verificar que aparece el picker manual), una con fecha inválida (verificar que se excluye y reporta), y una fila duplicada de una ya importada antes (verificar que no duplica).
+- Verificar que el backfill de email solo pisa `Resource.email` cuando estaba vacío.
+- Verificar en `/holidays` que las vacaciones importadas aparecen en la tabla con sus datos correctos.
+
+## Boundaries
+
+- **Always**: nunca sobreescribir un `Resource.email` ya existente. Nunca importar una fila fuera de 2026 sin confirmación explícita futura (este spec es solo para 2026). Nunca crear un `Vacation` duplicado silenciosamente.
+- **Ask first**: si en el futuro se quiere importar años adicionales del mismo CSV, o cambiar el heurístico de matching.
+- **Never**: modificar `CsvImportModal.tsx` ni `/api/country-holidays/import` (flujo de feriados, no tocar). No tocar Gantt, Control de Horas, ni la lógica de capacidad/sobrecarga existente — el nuevo campo `halfDay` queda como dato descriptivo, sin wiring a cálculos de capacidad en este spec.
+
+## Success Criteria
+
+1. Botón "Importar CSV" en "Vacaciones programadas", visible solo para admin.
+2. Preview muestra correctamente: filas con match automático, filas sin match con picker manual, filas con error (fecha inválida) excluidas y listadas.
+3. Confirmar el import crea los `Vacation` correctos (fechas, tipo, medio-día), sin duplicar reimportaciones, y completa `Resource.email` solo cuando estaba vacío.
+4. `npx tsc --noEmit` y `npm run build` pasan sin errores.
+5. QA manual con datos descartables confirma los 5 casos de la Testing Strategy.
+
+## Open Questions
+
+Ninguna.
