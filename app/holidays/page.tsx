@@ -8,6 +8,7 @@ import { formatDate } from '@/lib/date-utils'
 import { Plus, Trash2, Upload, Download, Filter, Pencil } from 'lucide-react'
 import HolidayModal from '@/components/modals/HolidayModal'
 import VacationModal from '@/components/modals/VacationModal'
+import VacationCsvImportModal from '@/components/modals/VacationCsvImportModal'
 import CsvImportModal from '@/components/modals/CsvImportModal'
 import type { Resource, Vacation, CountryHoliday } from '@/types'
 import { FLAG_BY_NAME } from '@/lib/countries'
@@ -32,6 +33,7 @@ export default function HolidaysPage() {
   const [showHolidayModal, setShowHolidayModal] = useState(false)
   const [editHoliday, setEditHoliday] = useState<CountryHoliday | null>(null)
   const [showVacationModal, setShowVacationModal] = useState(false)
+  const [showVacationCsvModal, setShowVacationCsvModal] = useState(false)
   const [showCsvModal, setShowCsvModal] = useState(false)
   const [filterCountry, setFilterCountry] = useState<string>('')
 
@@ -101,14 +103,24 @@ export default function HolidaysPage() {
       <section>
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <h2 className="text-lg font-semibold text-gray-700">Vacaciones programadas</h2>
-          <button
-            onClick={() => setShowVacationModal(true)}
-            disabled={!isAdmin && !myResource}
-            title={!isAdmin && !myResource ? 'Tu usuario no está vinculado a ningún recurso' : undefined}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Plus size={14} /> Agregar vacación
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {isAdmin && (
+              <button
+                onClick={() => setShowVacationCsvModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3a3a3a] text-white rounded-lg hover:bg-[#222] transition-colors text-sm"
+              >
+                <Upload size={14} /> Importar CSV
+              </button>
+            )}
+            <button
+              onClick={() => setShowVacationModal(true)}
+              disabled={!isAdmin && !myResource}
+              title={!isAdmin && !myResource ? 'Tu usuario no está vinculado a ningún recurso' : undefined}
+              className="flex items-center gap-2 px-3 py-1.5 bg-[#0170B9] text-white rounded-lg hover:bg-[#005a94] transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={14} /> Agregar vacación
+            </button>
+          </div>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
           <table className="w-full text-sm">
@@ -119,13 +131,14 @@ export default function HolidaysPage() {
                 <th className="px-4 py-3 text-left">Desde</th>
                 <th className="px-4 py-3 text-left">Hasta</th>
                 <th className="px-4 py-3 text-right">Días hábiles</th>
+                <th className="px-4 py-3 text-left">Tipo</th>
                 <th className="px-4 py-3 text-left">Notas</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {vacations.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-6 text-gray-400">Sin vacaciones registradas</td></tr>
+                <tr><td colSpan={8} className="text-center py-6 text-gray-400">Sin vacaciones registradas</td></tr>
               ) : vacations.map((v) => (
                 <tr key={v.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
@@ -138,6 +151,7 @@ export default function HolidaysPage() {
                   <td className="px-4 py-3">{formatDate(v.startDate)}</td>
                   <td className="px-4 py-3">{formatDate(v.endDate)}</td>
                   <td className="px-4 py-3 text-right font-medium">{calcWorkingDays(v.startDate, v.endDate)} días</td>
+                  <td className="px-4 py-3 text-gray-500">{v.type}{v.halfDay ? ' (½ día)' : ''}</td>
                   <td className="px-4 py-3 text-gray-500">{v.notes || '—'}</td>
                   <td className="px-4 py-3 text-center">
                     {(isAdmin || myResource?.id === v.resourceId) && (
@@ -270,6 +284,7 @@ export default function HolidaysPage() {
         onClose={() => setShowVacationModal(false)}
         lockedResource={isAdmin ? undefined : (myResource ? { id: myResource.id, name: myResource.name } : undefined)}
       />
+      {isAdmin && <VacationCsvImportModal open={showVacationCsvModal} onClose={() => setShowVacationCsvModal(false)} />}
       {isAdmin && <CsvImportModal open={showCsvModal} onClose={() => setShowCsvModal(false)} />}
     </div>
   )

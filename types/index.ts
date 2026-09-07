@@ -58,6 +58,8 @@ export interface Vacation {
   startDate: string
   endDate: string
   notes: string
+  type: string
+  halfDay: boolean
   resource?: Resource
 }
 
